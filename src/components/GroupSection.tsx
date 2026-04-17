@@ -219,7 +219,7 @@ export function GroupSection({
             style={{ borderLeftWidth: 3, borderLeftColor: group.color }}
           >
             <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full min-w-[640px]">
+              <table className="w-full min-w-[640px] table-fixed">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="w-10 pl-2 pr-1" />
@@ -250,7 +250,7 @@ export function GroupSection({
                       </th>
                     )}
                     {!hiddenColumns.notes && (
-                      <th className="py-2.5 px-3 text-left text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-3 w-36 text-left text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
                         Notes
                       </th>
                     )}

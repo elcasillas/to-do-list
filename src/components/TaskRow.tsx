@@ -257,7 +257,7 @@ export function TaskRow({
               setEditingTitle(true);
             }}
             className={cn(
-              "text-sm cursor-text hover:text-blue-600 transition-colors block truncate max-w-[240px]",
+              "text-sm cursor-text hover:text-blue-600 transition-colors block truncate",
               task.completed
                 ? "line-through text-slate-400"
                 : "text-slate-800 font-medium"
