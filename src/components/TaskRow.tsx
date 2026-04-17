@@ -8,6 +8,7 @@ import {
   Edit2,
   CalendarDays,
   ArrowRight,
+  MessageCircle,
 } from "lucide-react";
 import {
   useFloating,
@@ -95,7 +96,7 @@ export function TaskRow({
   hiddenColumns,
   groups,
 }: TaskRowProps) {
-  const { updateTask, duplicateTask, moveBetweenGroups, selectTask, selectedTaskId } =
+  const { updateTask, duplicateTask, moveBetweenGroups, selectTask, selectedTaskId, updates } =
     useTaskStore();
   const isSelected = selectedTaskId === task.id;
 
@@ -266,6 +267,32 @@ export function TaskRow({
             {task.title}
           </span>
         )}
+      </td>
+
+      {/* Updates shortcut */}
+      <td className="py-2 px-1 w-16">
+        <div className="flex items-center justify-center">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              selectTask(task.id);
+            }}
+            className={cn(
+              "relative flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+              isSelected
+                ? "text-blue-600 bg-blue-100"
+                : "text-slate-300 hover:text-blue-500 hover:bg-blue-50 opacity-0 group-hover/row:opacity-100"
+            )}
+            title="Open updates"
+          >
+            <MessageCircle className="w-4 h-4" />
+            {(updates[task.id]?.length ?? 0) > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                {updates[task.id].length}
+              </span>
+            )}
+          </button>
+        </div>
       </td>
 
       {/* Owner */}

@@ -71,6 +71,7 @@ export function GroupSection({
   const visibleColCount =
     1 + // checkbox
     1 + // title
+    1 + // updates
     (hiddenColumns.owner ? 0 : 1) +
     (hiddenColumns.status ? 0 : 1) +
     (hiddenColumns.dueDate ? 0 : 1) +
@@ -224,6 +225,7 @@ export function GroupSection({
                     <th className="py-2.5 px-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                       Task
                     </th>
+                    <th className="w-16" />
                     {!hiddenColumns.owner && (
                       <th className="py-2.5 px-3 w-[72px] text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                         Owner
