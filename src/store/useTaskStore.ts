@@ -1,7 +1,17 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import { generateInitials, getAvatarColor } from "../lib/utils";
+import {
+  loadAllData,
+  seedData,
+  dbInsertGroup,
+  dbUpdateGroup,
+  dbDeleteGroup,
+  dbInsertTask,
+  dbUpdateTask,
+  dbDeleteTask,
+  dbBatchUpdateOrders,
+} from "../lib/db";
 import type {
   Task,
   Group,
@@ -11,6 +21,8 @@ import type {
   TaskPriority,
   SortField,
 } from "../types";
+
+// ─── Seed helpers ─────────────────────────────────────────────
 
 function makeOwner(name: string) {
   return { name, initials: generateInitials(name), color: getAvatarColor(name) };
@@ -103,23 +115,25 @@ const PRIORITY_ORDER: Record<TaskPriority, number> = {
   low: 3,
 };
 
+// ─── Store interface ──────────────────────────────────────────
+
 interface TaskStore {
   tasks: Task[];
   groups: Group[];
   filter: FilterState;
   sort: SortState;
   hiddenColumns: HiddenColumns;
+  loading: boolean;
+  error: string | null;
+
+  loadData: () => Promise<void>;
 
   addTask: (task: Omit<Task, "id" | "createdAt" | "updatedAt" | "order">) => string;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   duplicateTask: (id: string) => void;
   reorderTasks: (groupId: string, activeId: string, overId: string) => void;
-  moveBetweenGroups: (
-    taskId: string,
-    toGroupId: string,
-    overId?: string
-  ) => void;
+  moveBetweenGroups: (taskId: string, toGroupId: string, overId?: string) => void;
 
   addGroup: (name: string) => void;
   updateGroup: (id: string, updates: Partial<Group>) => void;
@@ -132,208 +146,221 @@ interface TaskStore {
   toggleColumn: (col: keyof HiddenColumns) => void;
 }
 
-export const useTaskStore = create<TaskStore>()(
-  persist(
-    (set, get) => ({
-      tasks: SEED_TASKS,
-      groups: DEFAULT_GROUPS,
-      filter: { search: "", owner: "", status: "", priority: "" },
-      sort: { field: "", direction: "asc" },
-      hiddenColumns: {
-        owner: false,
-        status: false,
-        dueDate: false,
-        priority: false,
-        notes: false,
-      },
+// ─── Store ────────────────────────────────────────────────────
 
-      addTask: (taskData) => {
-        const { tasks } = get();
-        const groupTasks = tasks.filter((t) => t.groupId === taskData.groupId);
-        const id = uuidv4();
-        set({
-          tasks: [
-            ...tasks,
-            {
-              ...taskData,
-              id,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              order: groupTasks.length,
-            },
-          ],
-        });
-        return id;
-      },
+export const useTaskStore = create<TaskStore>()((set, get) => ({
+  tasks: [],
+  groups: [],
+  filter: { search: "", owner: "", status: "", priority: "" },
+  sort: { field: "", direction: "asc" },
+  hiddenColumns: {
+    owner: false,
+    status: false,
+    dueDate: false,
+    priority: false,
+    notes: false,
+  },
+  loading: true,
+  error: null,
 
-      updateTask: (id, updates) => {
-        set({
-          tasks: get().tasks.map((t) =>
-            t.id === id
-              ? { ...t, ...updates, updatedAt: new Date().toISOString() }
-              : t
-          ),
-        });
-      },
+  // ── Bootstrap ────────────────────────────────────────────────
+  loadData: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { groups, tasks } = await loadAllData();
 
-      deleteTask: (id) => {
-        set({ tasks: get().tasks.filter((t) => t.id !== id) });
-      },
+      if (groups.length === 0) {
+        // First run — seed default data
+        await seedData(DEFAULT_GROUPS, SEED_TASKS);
+        set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS, loading: false });
+      } else {
+        set({ groups, tasks, loading: false });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load data";
+      set({ error: msg, loading: false });
+    }
+  },
 
-      duplicateTask: (id) => {
-        const { tasks } = get();
-        const task = tasks.find((t) => t.id === id);
-        if (!task) return;
-        const groupTasks = tasks.filter((t) => t.groupId === task.groupId);
-        set({
-          tasks: [
-            ...tasks,
-            {
-              ...task,
-              id: uuidv4(),
-              title: `${task.title} (copy)`,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              order: groupTasks.length,
-            },
-          ],
-        });
-      },
+  // ── Task actions ─────────────────────────────────────────────
+  addTask: (taskData) => {
+    const { tasks } = get();
+    const groupTasks = tasks.filter((t) => t.groupId === taskData.groupId);
+    const id = uuidv4();
+    const task: Task = {
+      ...taskData,
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: groupTasks.length,
+    };
+    set({ tasks: [...tasks, task] });
+    dbInsertTask(task).catch(console.error);
+    return id;
+  },
 
-      reorderTasks: (groupId, activeId, overId) => {
-        const { tasks } = get();
-        const groupTasks = tasks
-          .filter((t) => t.groupId === groupId)
-          .sort((a, b) => a.order - b.order);
+  updateTask: (id, updates) => {
+    set({
+      tasks: get().tasks.map((t) =>
+        t.id === id
+          ? { ...t, ...updates, updatedAt: new Date().toISOString() }
+          : t
+      ),
+    });
+    dbUpdateTask(id, updates).catch(console.error);
+  },
 
-        const activeIdx = groupTasks.findIndex((t) => t.id === activeId);
-        const overIdx = groupTasks.findIndex((t) => t.id === overId);
-        if (activeIdx === -1 || overIdx === -1) return;
+  deleteTask: (id) => {
+    set({ tasks: get().tasks.filter((t) => t.id !== id) });
+    dbDeleteTask(id).catch(console.error);
+  },
 
-        const reordered = [...groupTasks];
-        const [moved] = reordered.splice(activeIdx, 1);
-        reordered.splice(overIdx, 0, moved);
+  duplicateTask: (id) => {
+    const { tasks } = get();
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const groupTasks = tasks.filter((t) => t.groupId === task.groupId);
+    const newTask: Task = {
+      ...task,
+      id: uuidv4(),
+      title: `${task.title} (copy)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: groupTasks.length,
+    };
+    set({ tasks: [...tasks, newTask] });
+    dbInsertTask(newTask).catch(console.error);
+  },
 
-        const orderMap = Object.fromEntries(reordered.map((t, i) => [t.id, i]));
-        set({
-          tasks: tasks.map((t) =>
-            orderMap[t.id] !== undefined ? { ...t, order: orderMap[t.id] } : t
-          ),
-        });
-      },
+  reorderTasks: (groupId, activeId, overId) => {
+    const { tasks } = get();
+    const groupTasks = tasks
+      .filter((t) => t.groupId === groupId)
+      .sort((a, b) => a.order - b.order);
 
-      moveBetweenGroups: (taskId, toGroupId, overId) => {
-        const { tasks } = get();
-        const task = tasks.find((t) => t.id === taskId);
-        if (!task || task.groupId === toGroupId) return;
+    const activeIdx = groupTasks.findIndex((t) => t.id === activeId);
+    const overIdx = groupTasks.findIndex((t) => t.id === overId);
+    if (activeIdx === -1 || overIdx === -1) return;
 
-        const toGroupTasks = tasks
-          .filter((t) => t.groupId === toGroupId)
-          .sort((a, b) => a.order - b.order);
+    const reordered = [...groupTasks];
+    const [moved] = reordered.splice(activeIdx, 1);
+    reordered.splice(overIdx, 0, moved);
 
-        let insertAt = toGroupTasks.length;
-        if (overId) {
-          const overIdx = toGroupTasks.findIndex((t) => t.id === overId);
-          if (overIdx !== -1) insertAt = overIdx;
-        }
+    const orderMap = Object.fromEntries(reordered.map((t, i) => [t.id, i]));
+    const updated = tasks.map((t) =>
+      orderMap[t.id] !== undefined ? { ...t, order: orderMap[t.id] } : t
+    );
+    set({ tasks: updated });
 
-        set({
-          tasks: tasks.map((t) => {
-            if (t.id === taskId) {
-              return {
-                ...t,
-                groupId: toGroupId,
-                order: insertAt,
-                updatedAt: new Date().toISOString(),
-              };
-            }
-            if (t.groupId === toGroupId) {
-              const idx = toGroupTasks.findIndex((tt) => tt.id === t.id);
-              return { ...t, order: idx >= insertAt ? idx + 1 : idx };
-            }
-            return t;
-          }),
-        });
-      },
+    const affected = reordered.map((t, i) => ({ id: t.id, order: i }));
+    dbBatchUpdateOrders(affected).catch(console.error);
+  },
 
-      addGroup: (name) => {
-        const { groups } = get();
-        const palette = [
-          "#6366f1",
-          "#f59e0b",
-          "#10b981",
-          "#8b5cf6",
-          "#f43f5e",
-          "#06b6d4",
-        ];
-        set({
-          groups: [
-            ...groups,
-            {
-              id: uuidv4(),
-              name,
-              color: palette[groups.length % palette.length],
-              collapsed: false,
-              order: groups.length,
-            },
-          ],
-        });
-      },
+  moveBetweenGroups: (taskId, toGroupId, overId) => {
+    const { tasks } = get();
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.groupId === toGroupId) return;
 
-      updateGroup: (id, updates) => {
-        set({
-          groups: get().groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
-        });
-      },
+    const toGroupTasks = tasks
+      .filter((t) => t.groupId === toGroupId)
+      .sort((a, b) => a.order - b.order);
 
-      deleteGroup: (id) => {
-        set({
-          groups: get().groups.filter((g) => g.id !== id),
-          tasks: get().tasks.filter((t) => t.groupId !== id),
-        });
-      },
+    let insertAt = toGroupTasks.length;
+    if (overId) {
+      const overIdx = toGroupTasks.findIndex((t) => t.id === overId);
+      if (overIdx !== -1) insertAt = overIdx;
+    }
 
-      toggleGroup: (id) => {
-        set({
-          groups: get().groups.map((g) =>
-            g.id === id ? { ...g, collapsed: !g.collapsed } : g
-          ),
-        });
-      },
+    const updated = tasks.map((t) => {
+      if (t.id === taskId) {
+        return { ...t, groupId: toGroupId, order: insertAt, updatedAt: new Date().toISOString() };
+      }
+      if (t.groupId === toGroupId) {
+        const idx = toGroupTasks.findIndex((tt) => tt.id === t.id);
+        return { ...t, order: idx >= insertAt ? idx + 1 : idx };
+      }
+      return t;
+    });
+    set({ tasks: updated });
 
-      setFilter: (filter) => {
-        set({ filter: { ...get().filter, ...filter } });
-      },
+    dbUpdateTask(taskId, { groupId: toGroupId, order: insertAt }).catch(console.error);
+    const affectedOrders = toGroupTasks.map((t, i) => ({
+      id: t.id,
+      order: i >= insertAt ? i + 1 : i,
+    }));
+    dbBatchUpdateOrders(affectedOrders).catch(console.error);
+  },
 
-      clearFilters: () => {
-        set({ filter: { search: "", owner: "", status: "", priority: "" } });
-      },
+  // ── Group actions ────────────────────────────────────────────
+  addGroup: (name) => {
+    const { groups } = get();
+    const palette = ["#6366f1", "#f59e0b", "#10b981", "#8b5cf6", "#f43f5e", "#06b6d4"];
+    const newGroup: Group = {
+      id: uuidv4(),
+      name,
+      color: palette[groups.length % palette.length],
+      collapsed: false,
+      order: groups.length,
+    };
+    set({ groups: [...groups, newGroup] });
+    dbInsertGroup(newGroup).catch(console.error);
+  },
 
-      setSort: (field) => {
-        const { sort } = get();
-        if (sort.field === field) {
-          if (sort.direction === "asc") {
-            set({ sort: { field, direction: "desc" } });
-          } else {
-            set({ sort: { field: "", direction: "asc" } });
-          }
-        } else {
-          set({ sort: { field, direction: "asc" } });
-        }
-      },
+  updateGroup: (id, updates) => {
+    set({
+      groups: get().groups.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+    });
+    dbUpdateGroup(id, updates).catch(console.error);
+  },
 
-      toggleColumn: (col) => {
-        set({
-          hiddenColumns: {
-            ...get().hiddenColumns,
-            [col]: !get().hiddenColumns[col],
-          },
-        });
-      },
-    }),
-    { name: "todo-list-v1" }
-  )
-);
+  deleteGroup: (id) => {
+    set({
+      groups: get().groups.filter((g) => g.id !== id),
+      tasks: get().tasks.filter((t) => t.groupId !== id),
+    });
+    dbDeleteGroup(id).catch(console.error);
+  },
+
+  toggleGroup: (id) => {
+    const { groups } = get();
+    const group = groups.find((g) => g.id === id);
+    if (!group) return;
+    const collapsed = !group.collapsed;
+    set({ groups: groups.map((g) => (g.id === id ? { ...g, collapsed } : g)) });
+    dbUpdateGroup(id, { collapsed }).catch(console.error);
+  },
+
+  // ── Filter / sort (local only) ───────────────────────────────
+  setFilter: (filter) => {
+    set({ filter: { ...get().filter, ...filter } });
+  },
+
+  clearFilters: () => {
+    set({ filter: { search: "", owner: "", status: "", priority: "" } });
+  },
+
+  setSort: (field) => {
+    const { sort } = get();
+    if (sort.field === field) {
+      set({
+        sort:
+          sort.direction === "asc"
+            ? { field, direction: "desc" }
+            : { field: "", direction: "asc" },
+      });
+    } else {
+      set({ sort: { field, direction: "asc" } });
+    }
+  },
+
+  toggleColumn: (col) => {
+    set({
+      hiddenColumns: { ...get().hiddenColumns, [col]: !get().hiddenColumns[col] },
+    });
+  },
+}));
+
+// ─── Selector helper ──────────────────────────────────────────
 
 export function getFilteredGroupTasks(
   tasks: Task[],
@@ -366,13 +393,9 @@ export function getFilteredGroupTasks(
     filtered = [...filtered].sort((a, b) => {
       let av = "";
       let bv = "";
-      if (field === "title") {
-        av = a.title;
-        bv = b.title;
-      } else if (field === "status") {
-        av = a.status;
-        bv = b.status;
-      } else if (field === "priority") {
+      if (field === "title") { av = a.title; bv = b.title; }
+      else if (field === "status") { av = a.status; bv = b.status; }
+      else if (field === "priority") {
         av = String(PRIORITY_ORDER[a.priority]);
         bv = String(PRIORITY_ORDER[b.priority]);
       } else if (field === "dueDate") {
