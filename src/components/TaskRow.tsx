@@ -270,7 +270,7 @@ export function TaskRow({
       </td>
 
       {/* Updates shortcut */}
-      <td className="py-2 px-1 w-16">
+      <td className="py-2 px-1 w-[72px]">
         <div className="flex items-center justify-center">
           <button
             onClick={(e) => {
