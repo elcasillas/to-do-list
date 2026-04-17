@@ -42,7 +42,7 @@ function DragOverlayContent({ task }: { task: Task }) {
 }
 
 export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProps) {
-  const { tasks, groups, filter, sort, hiddenColumns, reorderTasks, moveBetweenGroups, addGroup } =
+  const { tasks, groups, filter, sort, hiddenColumns, showDoneTasks, reorderTasks, moveBetweenGroups, addGroup } =
     useTaskStore();
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -107,7 +107,7 @@ export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProp
       onDragEnd={handleDragEnd}
     >
       {sortedGroups.map((group) => {
-        const groupTasks = getFilteredGroupTasks(tasks, group.id, filter, sort);
+        const groupTasks = getFilteredGroupTasks(tasks, group.id, filter, sort, showDoneTasks);
         return (
           <GroupSection
             key={group.id}

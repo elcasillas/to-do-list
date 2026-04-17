@@ -123,6 +123,7 @@ interface TaskStore {
   filter: FilterState;
   sort: SortState;
   hiddenColumns: HiddenColumns;
+  showDoneTasks: boolean;
   loading: boolean;
   error: string | null;
 
@@ -144,9 +145,19 @@ interface TaskStore {
   clearFilters: () => void;
   setSort: (field: SortField) => void;
   toggleColumn: (col: keyof HiddenColumns) => void;
+  toggleShowDoneTasks: () => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────
+
+function readShowDoneTasks(): boolean {
+  try {
+    const v = localStorage.getItem("showDoneTasks");
+    return v !== null ? v === "true" : true;
+  } catch {
+    return true;
+  }
+}
 
 export const useTaskStore = create<TaskStore>()((set, get) => ({
   tasks: [],
@@ -160,6 +171,7 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
     priority: false,
     notes: false,
   },
+  showDoneTasks: readShowDoneTasks(),
   loading: true,
   error: null,
 
@@ -364,6 +376,12 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
       hiddenColumns: { ...get().hiddenColumns, [col]: !get().hiddenColumns[col] },
     });
   },
+
+  toggleShowDoneTasks: () => {
+    const next = !get().showDoneTasks;
+    try { localStorage.setItem("showDoneTasks", String(next)); } catch { /* ignore */ }
+    set({ showDoneTasks: next });
+  },
 }));
 
 // ─── Selector helper ──────────────────────────────────────────
@@ -372,9 +390,14 @@ export function getFilteredGroupTasks(
   tasks: Task[],
   groupId: string,
   filter: FilterState,
-  sort: SortState
+  sort: SortState,
+  showDoneTasks = true
 ): Task[] {
   let filtered = tasks.filter((t) => t.groupId === groupId);
+
+  if (!showDoneTasks) {
+    filtered = filtered.filter((t) => t.status !== "done");
+  }
 
   const { search, owner, status, priority } = filter;
   if (search) {

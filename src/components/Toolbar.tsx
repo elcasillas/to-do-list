@@ -5,6 +5,7 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   Eye,
+  EyeOff,
   Layers,
   X,
   ChevronDown,
@@ -22,8 +23,15 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onAddTask }: ToolbarProps) {
-  const { filter, setFilter, clearFilters, sort, setSort, hiddenColumns, toggleColumn, groups } =
-    useTaskStore();
+  const {
+    filter, setFilter, clearFilters, sort, setSort,
+    hiddenColumns, toggleColumn, groups,
+    tasks, showDoneTasks, toggleShowDoneTasks,
+  } = useTaskStore();
+
+  const hiddenDoneCount = !showDoneTasks
+    ? tasks.filter((t) => t.status === "done").length
+    : 0;
 
   const [showFilter, setShowFilter] = useState(false);
   const [showSort, setShowSort] = useState(false);
@@ -332,6 +340,33 @@ export function Toolbar({ onAddTask }: ToolbarProps) {
           </div>
         )}
       </div>
+
+      {/* Show / hide done tasks */}
+      <button
+        onClick={toggleShowDoneTasks}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+          !showDoneTasks
+            ? "bg-blue-50 border-blue-300 text-blue-700"
+            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+        )}
+      >
+        {showDoneTasks ? (
+          <EyeOff className="w-3.5 h-3.5" />
+        ) : (
+          <Eye className="w-3.5 h-3.5" />
+        )}
+        <span className="hidden sm:inline">
+          {showDoneTasks ? "Hide done" : "Show done"}
+        </span>
+      </button>
+
+      {/* Hidden done count hint */}
+      {hiddenDoneCount > 0 && (
+        <span className="text-xs text-slate-400 whitespace-nowrap">
+          {hiddenDoneCount} done hidden
+        </span>
+      )}
 
       {/* Group by (decorative) */}
       <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
