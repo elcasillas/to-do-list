@@ -281,7 +281,7 @@ export function TaskRow({
               "relative flex items-center justify-center w-7 h-7 rounded-md transition-colors",
               isSelected
                 ? "text-blue-600 bg-blue-100"
-                : "text-slate-300 hover:text-blue-500 hover:bg-blue-50 opacity-0 group-hover/row:opacity-100"
+                : "text-slate-300 hover:text-blue-500 hover:bg-blue-50"
             )}
             title="Open updates"
           >
