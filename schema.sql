@@ -49,3 +49,23 @@ create policy "anon_all" on public.tasks
 create index if not exists tasks_group_id_idx on public.tasks(group_id);
 create index if not exists tasks_sort_order_idx on public.tasks(sort_order);
 create index if not exists groups_sort_order_idx on public.groups(sort_order);
+
+-- ── Task Updates table ────────────────────────────────────────
+create table if not exists public.task_updates (
+  id              text primary key,
+  task_id         text not null references public.tasks(id) on delete cascade,
+  author_name     text not null default '',
+  author_initials text not null default '',
+  author_color    text not null default '#64748b',
+  content         text not null,
+  created_at      text not null,
+  updated_at      text not null
+);
+
+alter table public.task_updates enable row level security;
+
+create policy "anon_all" on public.task_updates
+  for all to anon using (true) with check (true);
+
+create index if not exists task_updates_task_id_idx  on public.task_updates(task_id);
+create index if not exists task_updates_created_at_idx on public.task_updates(created_at);

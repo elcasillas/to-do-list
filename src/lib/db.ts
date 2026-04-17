@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Task, Group } from "../types";
+import type { Task, Group, TaskUpdate } from "../types";
 
 // ─── Type mappers ────────────────────────────────────────────
 
@@ -163,6 +163,50 @@ export async function dbUpdateTask(
 
 export async function dbDeleteTask(id: string): Promise<void> {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Task update operations ───────────────────────────────────
+
+function dbToTaskUpdate(row: Record<string, unknown>): TaskUpdate {
+  return {
+    id: row.id as string,
+    taskId: row.task_id as string,
+    authorName: (row.author_name as string) || "",
+    authorInitials: (row.author_initials as string) || "",
+    authorColor: (row.author_color as string) || "#64748b",
+    content: row.content as string,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export async function loadTaskUpdates(taskId: string): Promise<TaskUpdate[]> {
+  const { data, error } = await supabase
+    .from("task_updates")
+    .select("*")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(dbToTaskUpdate);
+}
+
+export async function dbInsertTaskUpdate(u: TaskUpdate): Promise<void> {
+  const { error } = await supabase.from("task_updates").insert({
+    id: u.id,
+    task_id: u.taskId,
+    author_name: u.authorName,
+    author_initials: u.authorInitials,
+    author_color: u.authorColor,
+    content: u.content,
+    created_at: u.createdAt,
+    updated_at: u.updatedAt,
+  });
+  if (error) throw error;
+}
+
+export async function dbDeleteTaskUpdate(id: string): Promise<void> {
+  const { error } = await supabase.from("task_updates").delete().eq("id", id);
   if (error) throw error;
 }
 

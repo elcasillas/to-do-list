@@ -95,7 +95,9 @@ export function TaskRow({
   hiddenColumns,
   groups,
 }: TaskRowProps) {
-  const { updateTask, duplicateTask, moveBetweenGroups } = useTaskStore();
+  const { updateTask, duplicateTask, moveBetweenGroups, selectTask, selectedTaskId } =
+    useTaskStore();
+  const isSelected = selectedTaskId === task.id;
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
@@ -195,9 +197,17 @@ export function TaskRow({
     <tr
       ref={setNodeRef}
       style={rowStyle}
+      onClick={(e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest("button") || t.closest("input")) return;
+        selectTask(task.id);
+      }}
       className={cn(
-        "group/row border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors",
-        isDragging && "bg-blue-50 shadow-lg rounded"
+        "group/row border-b border-slate-100 last:border-0 transition-colors cursor-pointer",
+        isSelected
+          ? "bg-blue-50 hover:bg-blue-50/80"
+          : "hover:bg-slate-50/70",
+        isDragging && "bg-blue-50 shadow-lg rounded opacity-40"
       )}
     >
       {/* Drag handle + Checkbox */}
@@ -240,7 +250,8 @@ export function TaskRow({
           />
         ) : (
           <span
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setTitleDraft(task.title);
               setEditingTitle(true);
             }}

@@ -3,12 +3,20 @@ import { CheckSquare, ChevronDown, Loader2, AlertCircle, RefreshCw } from "lucid
 import { Toolbar } from "./components/Toolbar";
 import { TaskTable } from "./components/TaskTable";
 import { TaskModal } from "./components/TaskModal";
+import { TaskSidePanel } from "./components/TaskSidePanel";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 import { useTaskStore } from "./store/useTaskStore";
 import type { Task } from "./types";
 
 export default function App() {
-  const { loadData, loading, error, deleteTask } = useTaskStore();
+  const {
+    loadData, loading, error, deleteTask,
+    tasks, selectedTaskId, updates, updatesLoading, selectTask,
+  } = useTaskStore();
+
+  const selectedTask = selectedTaskId
+    ? (tasks.find((t) => t.id === selectedTaskId) ?? null)
+    : null;
 
   const [modalState, setModalState] = useState<{
     open: boolean;
@@ -42,9 +50,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="h-screen flex flex-col overflow-hidden bg-slate-50">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+      <header className="flex-shrink-0 bg-white border-b border-slate-200 z-20 shadow-sm">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
@@ -88,48 +96,72 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Main content ────────────────────────────────────────── */}
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-4">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-            <p className="text-sm text-slate-500">Loading your tasks…</p>
+      {/* ── Content: main table + side panel ────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Main scroll area */}
+        <main className="flex-1 min-w-0 overflow-y-auto">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-sm text-slate-500">Loading your tasks…</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-32 gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-red-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-800 mb-2">
+                    Could not connect to database
+                  </p>
+                  <pre className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 max-w-sm text-left whitespace-pre-wrap break-words">
+                    {error}
+                  </pre>
+                  <p className="text-xs text-slate-400 mb-4">
+                    Check the browser console for full details.
+                  </p>
+                  <button
+                    onClick={() => loadData()}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors mx-auto"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Toolbar onAddTask={openAddTask} />
+                <TaskTable
+                  onEditTask={openEditTask}
+                  onDeleteTask={openDeleteTask}
+                  onAddTask={openAddTask}
+                />
+              </>
+            )}
           </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-4">
-            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-              <AlertCircle className="w-6 h-6 text-red-500" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-slate-800 mb-2">
-                Could not connect to database
-              </p>
-              <pre className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 max-w-sm text-left whitespace-pre-wrap break-words">
-                {error}
-              </pre>
-              <p className="text-xs text-slate-400 mb-4">
-                Check the browser console for full details.
-              </p>
-              <button
-                onClick={() => loadData()}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors mx-auto"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Retry
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Toolbar onAddTask={openAddTask} />
-            <TaskTable
-              onEditTask={openEditTask}
-              onDeleteTask={openDeleteTask}
-              onAddTask={openAddTask}
+        </main>
+
+        {/* Side panel — mobile: fixed overlay; desktop: inline docked */}
+        {selectedTask && (
+          <aside
+            className="
+              fixed inset-0 z-40 bg-white flex flex-col
+              sm:relative sm:inset-auto sm:z-auto
+              sm:w-[460px] sm:flex-shrink-0 sm:border-l sm:border-slate-200
+              sm:overflow-y-auto
+            "
+          >
+            <TaskSidePanel
+              task={selectedTask}
+              updates={updates[selectedTask.id] ?? []}
+              updatesLoading={updatesLoading}
+              onClose={() => selectTask(null)}
             />
-          </>
+          </aside>
         )}
-      </main>
+      </div>
 
       {/* ── Modals ──────────────────────────────────────────────── */}
       {modalState.open && (

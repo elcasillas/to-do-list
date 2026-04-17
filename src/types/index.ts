@@ -53,3 +53,14 @@ export interface HiddenColumns {
   priority: boolean;
   notes: boolean;
 }
+
+export interface TaskUpdate {
+  id: string;
+  taskId: string;
+  authorName: string;
+  authorInitials: string;
+  authorColor: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}

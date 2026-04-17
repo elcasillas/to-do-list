@@ -11,6 +11,8 @@ import {
   dbUpdateTask,
   dbDeleteTask,
   dbBatchUpdateOrders,
+  loadTaskUpdates as loadTaskUpdatesFromDb,
+  dbInsertTaskUpdate,
 } from "../lib/db";
 import type {
   Task,
@@ -20,6 +22,7 @@ import type {
   HiddenColumns,
   TaskPriority,
   SortField,
+  TaskUpdate,
 } from "../types";
 
 // ─── Seed helpers ─────────────────────────────────────────────
@@ -127,6 +130,11 @@ interface TaskStore {
   loading: boolean;
   error: string | null;
 
+  // Side panel
+  selectedTaskId: string | null;
+  updates: Record<string, TaskUpdate[]>;
+  updatesLoading: boolean;
+
   loadData: () => Promise<void>;
 
   addTask: (task: Omit<Task, "id" | "createdAt" | "updatedAt" | "order">) => string;
@@ -146,6 +154,11 @@ interface TaskStore {
   setSort: (field: SortField) => void;
   toggleColumn: (col: keyof HiddenColumns) => void;
   toggleShowDoneTasks: () => void;
+
+  // Side panel actions
+  selectTask: (id: string | null) => void;
+  loadTaskUpdates: (taskId: string) => Promise<void>;
+  addTaskUpdate: (taskId: string, content: string) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────
@@ -174,6 +187,9 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   showDoneTasks: readShowDoneTasks(),
   loading: true,
   error: null,
+  selectedTaskId: null,
+  updates: {},
+  updatesLoading: false,
 
   // ── Bootstrap ────────────────────────────────────────────────
   loadData: async () => {
@@ -229,7 +245,10 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   },
 
   deleteTask: (id) => {
-    set({ tasks: get().tasks.filter((t) => t.id !== id) });
+    set((state) => ({
+      tasks: state.tasks.filter((t) => t.id !== id),
+      selectedTaskId: state.selectedTaskId === id ? null : state.selectedTaskId,
+    }));
     dbDeleteTask(id).catch(console.error);
   },
 
@@ -381,6 +400,50 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
     const next = !get().showDoneTasks;
     try { localStorage.setItem("showDoneTasks", String(next)); } catch { /* ignore */ }
     set({ showDoneTasks: next });
+  },
+
+  // ── Side panel ───────────────────────────────────────────────
+  selectTask: (id) => {
+    set({ selectedTaskId: id });
+    if (id !== null && !(id in get().updates)) {
+      get().loadTaskUpdates(id);
+    }
+  },
+
+  loadTaskUpdates: async (taskId) => {
+    set({ updatesLoading: true });
+    try {
+      const fetched = await loadTaskUpdatesFromDb(taskId);
+      set((state) => ({
+        updates: { ...state.updates, [taskId]: fetched },
+        updatesLoading: false,
+      }));
+    } catch (err) {
+      console.error("[loadTaskUpdates]", err);
+      set({ updatesLoading: false });
+    }
+  },
+
+  addTaskUpdate: (taskId, content) => {
+    let authorName = "Ed Casillas";
+    try { authorName = localStorage.getItem("authorName") || authorName; } catch { /* ignore */ }
+    const update: TaskUpdate = {
+      id: uuidv4(),
+      taskId,
+      authorName,
+      authorInitials: generateInitials(authorName),
+      authorColor: getAvatarColor(authorName),
+      content,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    set((state) => ({
+      updates: {
+        ...state.updates,
+        [taskId]: [update, ...(state.updates[taskId] ?? [])],
+      },
+    }));
+    dbInsertTaskUpdate(update).catch(console.error);
   },
 }));
 
