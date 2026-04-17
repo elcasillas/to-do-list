@@ -7,6 +7,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  MessageCircle,
 } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
@@ -225,7 +226,9 @@ export function GroupSection({
                     <th className="py-2.5 px-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                       Task
                     </th>
-                    <th className="w-[72px]" />
+                    <th className="py-2.5 px-3 w-[72px] text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <MessageCircle className="w-3.5 h-3.5 mx-auto" />
+                    </th>
                     {!hiddenColumns.owner && (
                       <th className="py-2.5 px-3 w-[72px] text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                         Owner
