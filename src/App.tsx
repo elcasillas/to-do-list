@@ -101,10 +101,15 @@ export default function App() {
               <AlertCircle className="w-6 h-6 text-red-500" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-slate-800 mb-1">
+              <p className="text-sm font-medium text-slate-800 mb-2">
                 Could not connect to database
               </p>
-              <p className="text-xs text-slate-500 mb-4 max-w-sm">{error}</p>
+              <pre className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 max-w-sm text-left whitespace-pre-wrap break-words">
+                {error}
+              </pre>
+              <p className="text-xs text-slate-400 mb-4">
+                Check the browser console for full details.
+              </p>
               <button
                 onClick={() => loadData()}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors mx-auto"

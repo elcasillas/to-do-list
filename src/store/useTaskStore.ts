@@ -177,7 +177,13 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
         set({ groups, tasks, loading: false });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load data";
+      console.error("[loadData] Supabase error:", err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+          ? String((err as Record<string, unknown>).message)
+          : JSON.stringify(err);
       set({ error: msg, loading: false });
     }
   },
