@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   GripVertical,
   MoreHorizontal,
@@ -8,6 +9,13 @@ import {
   CalendarDays,
   ArrowRight,
 } from "lucide-react";
+import {
+  useFloating,
+  autoUpdate,
+  offset,
+  flip,
+  shift,
+} from "@floating-ui/react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { StatusPill, STATUS_CONFIG } from "./ui/StatusPill";
@@ -18,39 +26,66 @@ import { useClickOutside } from "../hooks/useClickOutside";
 import { formatDate, isOverdue, cn } from "../lib/utils";
 import type { Task, TaskStatus, TaskPriority, HiddenColumns } from "../types";
 
+// ─── Shared floating middleware (defined outside component to stay stable) ────
+
+const FLOATING_MIDDLEWARE = [
+  offset(4),
+  flip({ padding: 8 }),
+  shift({ padding: 8 }),
+];
+
+// ─── Portal dropdown rendered outside the table DOM ──────────────────────────
+
+function PortalMenu({
+  setFloating,
+  floatingStyles,
+  open,
+  onClose,
+  children,
+  minWidth = 164,
+}: {
+  setFloating: (node: HTMLElement | null) => void;
+  floatingStyles: React.CSSProperties;
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+  minWidth?: number;
+}) {
+  const localRef = useRef<HTMLDivElement | null>(null);
+
+  // Merge floating-ui's ref setter with our local ref (for click-outside).
+  const mergedRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setFloating(node);
+      localRef.current = node;
+    },
+    [setFloating]
+  );
+
+  useClickOutside(localRef, onClose, open);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={mergedRef}
+      style={{ ...floatingStyles, zIndex: 9999, minWidth }}
+      className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden py-0.5"
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
+
+// ─── TaskRow ──────────────────────────────────────────────────────────────────
+
 interface TaskRowProps {
   task: Task;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
   hiddenColumns: HiddenColumns;
   groups: { id: string; name: string }[];
-}
-
-function Dropdown({
-  children,
-  open,
-  onClose,
-  align = "left",
-}: {
-  children: React.ReactNode;
-  open: boolean;
-  onClose: () => void;
-  align?: "left" | "right";
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, onClose, open);
-  if (!open) return null;
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "absolute top-full mt-1 z-40 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden min-w-[160px]",
-        align === "right" ? "right-0" : "left-0"
-      )}
-    >
-      {children}
-    </div>
-  );
 }
 
 export function TaskRow({
@@ -72,6 +107,37 @@ export function TaskRow({
 
   const titleRef = useRef<HTMLInputElement>(null);
 
+  // One useFloating per dropdown — each tracks its own anchor + popup position.
+  const {
+    refs: statusRefs,
+    floatingStyles: statusStyles,
+  } = useFloating({
+    strategy: "fixed",
+    placement: "bottom-start",
+    middleware: FLOATING_MIDDLEWARE,
+    whileElementsMounted: autoUpdate,
+  });
+
+  const {
+    refs: priorityRefs,
+    floatingStyles: priorityStyles,
+  } = useFloating({
+    strategy: "fixed",
+    placement: "bottom-start",
+    middleware: FLOATING_MIDDLEWARE,
+    whileElementsMounted: autoUpdate,
+  });
+
+  const {
+    refs: menuRefs,
+    floatingStyles: menuStyles,
+  } = useFloating({
+    strategy: "fixed",
+    placement: "bottom-end",
+    middleware: FLOATING_MIDDLEWARE,
+    whileElementsMounted: autoUpdate,
+  });
+
   const {
     attributes,
     listeners,
@@ -81,7 +147,7 @@ export function TaskRow({
     isDragging,
   } = useSortable({ id: task.id });
 
-  const style = {
+  const rowStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
@@ -103,15 +169,17 @@ export function TaskRow({
     const completed = !task.completed;
     updateTask(task.id, {
       completed,
-      status: completed ? "done" : task.status === "done" ? "not_started" : task.status,
+      status:
+        completed
+          ? "done"
+          : task.status === "done"
+          ? "not_started"
+          : task.status,
     });
   };
 
   const handleStatusChange = (status: TaskStatus) => {
-    updateTask(task.id, {
-      status,
-      completed: status === "done",
-    });
+    updateTask(task.id, { status, completed: status === "done" });
     setShowStatus(false);
   };
 
@@ -126,13 +194,13 @@ export function TaskRow({
   return (
     <tr
       ref={setNodeRef}
-      style={style}
+      style={rowStyle}
       className={cn(
         "group/row border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors",
         isDragging && "bg-blue-50 shadow-lg rounded"
       )}
     >
-      {/* Drag + Checkbox */}
+      {/* Drag handle + Checkbox */}
       <td className="w-10 pl-2 pr-1 py-2">
         <div className="flex items-center gap-0.5">
           <button
@@ -198,11 +266,24 @@ export function TaskRow({
         </td>
       )}
 
-      {/* Status */}
+      {/* Status — anchor wraps the pill; portal renders the menu */}
       {!hiddenColumns.status && (
-        <td className="py-2 px-2 w-36 relative">
-          <StatusPill status={task.status} onClick={() => setShowStatus(!showStatus)} />
-          <Dropdown open={showStatus} onClose={() => setShowStatus(false)}>
+        <td className="py-2 px-2 w-36">
+          <span
+            ref={statusRefs.setReference as React.RefCallback<HTMLSpanElement>}
+            className="block"
+          >
+            <StatusPill
+              status={task.status}
+              onClick={() => setShowStatus((o) => !o)}
+            />
+          </span>
+          <PortalMenu
+            setFloating={statusRefs.setFloating}
+            floatingStyles={statusStyles}
+            open={showStatus}
+            onClose={() => setShowStatus(false)}
+          >
             {(Object.keys(STATUS_CONFIG) as TaskStatus[]).map((s) => (
               <button
                 key={s}
@@ -221,13 +302,13 @@ export function TaskRow({
                 )}
               </button>
             ))}
-          </Dropdown>
+          </PortalMenu>
         </td>
       )}
 
       {/* Due date */}
       {!hiddenColumns.dueDate && (
-        <td className="py-2 px-3 w-28 text-center relative">
+        <td className="py-2 px-3 w-28 text-center">
           {editingDate ? (
             <input
               type="date"
@@ -270,14 +351,25 @@ export function TaskRow({
         </td>
       )}
 
-      {/* Priority */}
+      {/* Priority — same portal pattern as status */}
       {!hiddenColumns.priority && (
-        <td className="py-2 px-2 w-28 relative">
-          <PriorityPill
-            priority={task.priority}
-            onClick={() => setShowPriority(!showPriority)}
-          />
-          <Dropdown open={showPriority} onClose={() => setShowPriority(false)}>
+        <td className="py-2 px-2 w-28">
+          <span
+            ref={priorityRefs.setReference as React.RefCallback<HTMLSpanElement>}
+            className="block"
+          >
+            <PriorityPill
+              priority={task.priority}
+              onClick={() => setShowPriority((o) => !o)}
+            />
+          </span>
+          <PortalMenu
+            setFloating={priorityRefs.setFloating}
+            floatingStyles={priorityStyles}
+            open={showPriority}
+            onClose={() => setShowPriority(false)}
+            minWidth={148}
+          >
             {(Object.keys(PRIORITY_CONFIG) as TaskPriority[]).map((p) => (
               <button
                 key={p}
@@ -296,7 +388,7 @@ export function TaskRow({
                 )}
               </button>
             ))}
-          </Dropdown>
+          </PortalMenu>
         </td>
       )}
 
@@ -312,16 +404,26 @@ export function TaskRow({
         </td>
       )}
 
-      {/* Actions */}
-      <td className="py-2 px-1.5 w-9 relative">
+      {/* Actions menu — also portal-based */}
+      <td className="py-2 px-1.5 w-9">
         <div className="opacity-0 group-hover/row:opacity-100 transition-opacity">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+          <span
+            ref={menuRefs.setReference as React.RefCallback<HTMLSpanElement>}
+            className="inline-block"
           >
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-          <Dropdown open={showMenu} onClose={() => setShowMenu(false)} align="right">
+            <button
+              onClick={() => setShowMenu((o) => !o)}
+              className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </span>
+          <PortalMenu
+            setFloating={menuRefs.setFloating}
+            floatingStyles={menuStyles}
+            open={showMenu}
+            onClose={() => setShowMenu(false)}
+          >
             <button
               onClick={() => {
                 onEdit(task);
@@ -343,16 +445,16 @@ export function TaskRow({
               Duplicate
             </button>
             {otherGroups.length > 0 && (
-              <div className="relative">
+              <div>
                 <button
-                  onClick={() => setShowMove(!showMove)}
+                  onClick={() => setShowMove((o) => !o)}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                   Move to…
                 </button>
                 {showMove && (
-                  <div className="absolute right-full top-0 mr-1 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden min-w-[160px]">
+                  <div className="border-t border-slate-100 py-0.5">
                     {otherGroups.map((g) => (
                       <button
                         key={g.id}
@@ -361,7 +463,7 @@ export function TaskRow({
                           setShowMenu(false);
                           setShowMove(false);
                         }}
-                        className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        className="w-full text-left px-5 py-2 text-sm text-slate-600 hover:bg-slate-50"
                       >
                         {g.name}
                       </button>
@@ -381,7 +483,7 @@ export function TaskRow({
               <Trash2 className="w-3.5 h-3.5" />
               Delete
             </button>
-          </Dropdown>
+          </PortalMenu>
         </div>
       </td>
     </tr>
