@@ -74,14 +74,20 @@ export function Toolbar({ onAddTask }: ToolbarProps) {
         <div className="flex rounded-lg overflow-hidden shadow-sm">
           <button
             onClick={() => onAddTask()}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-white text-sm font-medium transition-colors"
+            style={{ backgroundColor: "#374259" }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#2c3649")}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#374259")}
           >
             <Plus className="w-4 h-4" />
-            New task
+            New Task
           </button>
           <button
             onClick={() => setShowNewTask(!showNewTask)}
-            className="px-2 py-2 bg-blue-600 text-white hover:bg-blue-700 border-l border-blue-500 transition-colors"
+            className="px-2 py-2 text-white transition-colors border-l border-white/20"
+            style={{ backgroundColor: "#374259" }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#2c3649")}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#374259")}
           >
             <ChevronDown className="w-3.5 h-3.5" />
           </button>
