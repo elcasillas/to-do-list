@@ -4,17 +4,6 @@
 -- https://supabase.com/dashboard/project/qnclwqjjurfpkwofqbhf/sql
 -- ============================================================
 
--- ── Helper: admin check (security definer avoids RLS recursion) ──
-create or replace function public.is_admin()
-returns boolean
-language sql security definer stable
-as $$
-  select coalesce(
-    (select role = 'admin' from public.profiles where id = auth.uid()),
-    false
-  );
-$$;
-
 -- ── Profiles table ─────────────────────────────────────────────
 create table if not exists public.profiles (
   id          uuid references auth.users(id) on delete cascade primary key,
@@ -30,6 +19,18 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles enable row level security;
+
+-- ── Helper: admin check (security definer avoids RLS recursion) ──
+-- Must be created AFTER the profiles table exists.
+create or replace function public.is_admin()
+returns boolean
+language sql security definer stable
+as $$
+  select coalesce(
+    (select role = 'admin' from public.profiles where id = auth.uid()),
+    false
+  );
+$$;
 
 -- All authenticated users can read all profiles (needed for task ownership display)
 create policy "profiles_select"
