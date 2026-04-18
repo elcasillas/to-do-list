@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Eye, EyeOff, Loader2, CheckSquare } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { cn } from "../../lib/utils";
 
-type AuthMode = "login" | "signup" | "forgot";
+type AuthMode = "login" | "forgot";
 
 // ── Shared field component ────────────────────────────────────
 
@@ -112,7 +112,7 @@ function LoginForm({ onSwitch }: { onSwitch: (m: AuthMode) => void }) {
         Sign in
       </button>
 
-      <div className="flex items-center justify-between text-sm pt-1">
+      <div className="text-sm pt-1">
         <button
           type="button"
           onClick={() => onSwitch("forgot")}
@@ -120,123 +120,7 @@ function LoginForm({ onSwitch }: { onSwitch: (m: AuthMode) => void }) {
         >
           Forgot password?
         </button>
-        <button
-          type="button"
-          onClick={() => onSwitch("signup")}
-          className="text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          Create account →
-        </button>
       </div>
-    </form>
-  );
-}
-
-// ── Sign-up form ──────────────────────────────────────────────
-
-function SignupForm({ onSwitch }: { onSwitch: (m: AuthMode) => void }) {
-  const { signUp } = useAuthStore();
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!fullName.trim()) { setError("Full name is required."); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
-    setLoading(true);
-    const err = await signUp(email.trim(), password, fullName.trim());
-    if (err) { setError(err); setLoading(false); return; }
-    setSuccess(true);
-    setLoading(false);
-  };
-
-  if (success) {
-    return (
-      <div className="text-center space-y-3 py-4">
-        <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-          <CheckSquare className="w-6 h-6 text-emerald-600" />
-        </div>
-        <p className="text-sm font-semibold text-slate-800">Check your email</p>
-        <p className="text-sm text-slate-500">
-          We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
-        </p>
-        <button
-          onClick={() => onSwitch("login")}
-          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-        >
-          Back to sign in
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <Field
-        label="Full name"
-        value={fullName}
-        onChange={setFullName}
-        placeholder="Alex Johnson"
-        autoComplete="name"
-      />
-      <Field
-        label="Email"
-        type="email"
-        value={email}
-        onChange={setEmail}
-        placeholder="you@example.com"
-        autoComplete="email"
-      />
-      <Field
-        label="Password"
-        type={showPw ? "text" : "password"}
-        value={password}
-        onChange={setPassword}
-        placeholder="8+ characters"
-        autoComplete="new-password"
-        rightSlot={
-          <button
-            type="button"
-            onClick={() => setShowPw((v) => !v)}
-            className="text-slate-400 hover:text-slate-600 transition-colors"
-            tabIndex={-1}
-          >
-            {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-        }
-      />
-
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
-
-      <button
-        type="submit"
-        disabled={loading || !email || !password || !fullName}
-        className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl transition-colors flex items-center justify-center gap-2"
-      >
-        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        Create account
-      </button>
-
-      <p className="text-sm text-center text-slate-500 pt-1">
-        Already have an account?{" "}
-        <button
-          type="button"
-          onClick={() => onSwitch("login")}
-          className="text-blue-600 hover:text-blue-700 font-medium"
-        >
-          Sign in
-        </button>
-      </p>
     </form>
   );
 }
@@ -428,7 +312,6 @@ function AuthCard({
 
 const TITLES: Record<AuthMode, { title: string; subtitle: string }> = {
   login: { title: "Welcome back", subtitle: "Sign in to your account." },
-  signup: { title: "Create an account", subtitle: "Get started with To Do List." },
   forgot: { title: "Forgot password", subtitle: "" },
 };
 
@@ -445,9 +328,6 @@ export function AuthPage() {
         )}
       >
         <LoginForm onSwitch={setMode} />
-      </div>
-      <div className={cn(mode === "signup" ? "block" : "hidden")}>
-        <SignupForm onSwitch={setMode} />
       </div>
       <div className={cn(mode === "forgot" ? "block" : "hidden")}>
         <ForgotForm onSwitch={setMode} />
