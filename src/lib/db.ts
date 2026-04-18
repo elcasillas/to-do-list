@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Task, Group, TaskUpdate } from "../types";
+import type { Task, Group, TaskUpdate, UserProfile, UserRole, UserStatus, PendingInvite } from "../types";
 
 // ─── Type mappers ────────────────────────────────────────────
 
@@ -217,6 +217,105 @@ export async function dbDeleteTaskUpdate(id: string): Promise<void> {
   const { error } = await supabase.from("task_updates").delete().eq("id", id);
   if (error) throw error;
 }
+
+// ─── Profile operations ───────────────────────────────────────
+
+function dbToProfile(row: Record<string, unknown>): UserProfile {
+  return {
+    id: row.id as string,
+    fullName: (row.full_name as string) || "",
+    email: row.email as string,
+    avatarUrl: (row.avatar_url as string) || null,
+    role: row.role as UserRole,
+    status: row.status as UserStatus,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export async function loadProfiles(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(dbToProfile);
+}
+
+export async function dbUpdateProfile(
+  id: string,
+  updates: Partial<Pick<UserProfile, "fullName" | "role" | "status" | "avatarUrl">>
+): Promise<void> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (updates.fullName !== undefined) patch.full_name = updates.fullName;
+  if (updates.role !== undefined) patch.role = updates.role;
+  if (updates.status !== undefined) patch.status = updates.status;
+  if (updates.avatarUrl !== undefined) patch.avatar_url = updates.avatarUrl;
+  const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function dbDeleteProfile(id: string): Promise<void> {
+  // Deleting the profile cascades via FK — auth.users row persists
+  // (full account deletion requires service role; this removes app access)
+  const { error } = await supabase.from("profiles").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function dbAdminCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "admin");
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// ─── Pending invite operations ────────────────────────────────
+
+function dbToInvite(row: Record<string, unknown>): PendingInvite {
+  return {
+    id: row.id as string,
+    email: row.email as string,
+    fullName: (row.full_name as string) || "",
+    role: row.role as UserRole,
+    invitedBy: (row.invited_by as string) || null,
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function loadPendingInvites(): Promise<PendingInvite[]> {
+  const { data, error } = await supabase
+    .from("pending_invites")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(dbToInvite);
+}
+
+export async function dbCreateInvite(
+  invite: Omit<PendingInvite, "id" | "createdAt">
+): Promise<PendingInvite> {
+  const { data, error } = await supabase
+    .from("pending_invites")
+    .insert({
+      email: invite.email.toLowerCase().trim(),
+      full_name: invite.fullName,
+      role: invite.role,
+      invited_by: invite.invitedBy,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToInvite(data);
+}
+
+export async function dbDeleteInvite(id: string): Promise<void> {
+  const { error } = await supabase.from("pending_invites").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Batch order update (tasks) ───────────────────────────────
 
 export async function dbBatchUpdateOrders(
   items: { id: string; order: number }[]

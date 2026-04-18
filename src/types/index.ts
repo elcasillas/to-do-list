@@ -64,3 +64,27 @@ export interface TaskUpdate {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── User management ───────────────────────────────────────────
+export type UserRole = "admin" | "manager" | "member";
+export type UserStatus = "active" | "invited" | "disabled";
+
+export interface UserProfile {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl?: string | null;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  invitedBy: string | null;
+  createdAt: string;
+}
