@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { X, MoreHorizontal } from "lucide-react";
 import { TaskUpdatesTab } from "./TaskUpdatesTab";
-import { TaskFilesTab } from "./TaskFilesTab";
 import { TaskActivityLogTab } from "./TaskActivityLogTab";
 import { StatusPill } from "./ui/StatusPill";
 import { PriorityPill } from "./ui/PriorityPill";
@@ -9,7 +8,7 @@ import { Avatar } from "./ui/Avatar";
 import { cn, formatDate } from "../lib/utils";
 import type { Task, TaskUpdate } from "../types";
 
-type PanelTab = "updates" | "files" | "activity";
+type PanelTab = "updates" | "activity";
 
 interface TaskSidePanelProps {
   task: Task;
@@ -28,7 +27,6 @@ export function TaskSidePanel({
 
   const tabs: { id: PanelTab; label: string; count?: number }[] = [
     { id: "updates", label: "Updates", count: updates.length || undefined },
-    { id: "files", label: "Files" },
     { id: "activity", label: "Activity Log" },
   ];
 
@@ -98,7 +96,6 @@ export function TaskSidePanel({
             loading={updatesLoading}
           />
         )}
-        {activeTab === "files" && <TaskFilesTab task={task} />}
         {activeTab === "activity" && (
           <TaskActivityLogTab task={task} updates={updates} />
         )}
