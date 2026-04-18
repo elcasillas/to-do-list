@@ -13,6 +13,7 @@ import {
   dbBatchUpdateOrders,
   loadTaskUpdates as loadTaskUpdatesFromDb,
   dbInsertTaskUpdate,
+  dbUpdateTaskUpdate,
 } from "../lib/db";
 import type {
   Task,
@@ -159,6 +160,7 @@ interface TaskStore {
   selectTask: (id: string | null) => void;
   loadTaskUpdates: (taskId: string) => Promise<void>;
   addTaskUpdate: (taskId: string, content: string) => void;
+  editTaskUpdate: (updateId: string, taskId: string, content: string) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────
@@ -444,6 +446,19 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
       },
     }));
     dbInsertTaskUpdate(update).catch(console.error);
+  },
+
+  editTaskUpdate: (updateId, taskId, content) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      updates: {
+        ...state.updates,
+        [taskId]: (state.updates[taskId] ?? []).map((u) =>
+          u.id === updateId ? { ...u, content, updatedAt: now } : u
+        ),
+      },
+    }));
+    dbUpdateTaskUpdate(updateId, content).catch(console.error);
   },
 }));
 

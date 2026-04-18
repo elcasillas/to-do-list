@@ -205,6 +205,14 @@ export async function dbInsertTaskUpdate(u: TaskUpdate): Promise<void> {
   if (error) throw error;
 }
 
+export async function dbUpdateTaskUpdate(id: string, content: string): Promise<void> {
+  const { error } = await supabase
+    .from("task_updates")
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function dbDeleteTaskUpdate(id: string): Promise<void> {
   const { error } = await supabase.from("task_updates").delete().eq("id", id);
   if (error) throw error;
