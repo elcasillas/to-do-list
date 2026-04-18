@@ -270,7 +270,7 @@ export function TaskRow({
       </td>
 
       {/* Updates shortcut */}
-      <td className="py-2 px-1 w-[72px]">
+      <td className="py-2 px-1 w-14">
         <div className="flex items-center justify-center">
           <button
             onClick={(e) => {
@@ -297,7 +297,7 @@ export function TaskRow({
 
       {/* Owner */}
       {!hiddenColumns.owner && (
-        <td className="py-2 px-3 w-[72px]">
+        <td className="py-2 px-1 w-14">
           <div className="flex justify-center">
             <Avatar owner={task.owner} />
           </div>
@@ -306,7 +306,7 @@ export function TaskRow({
 
       {/* Status — anchor wraps the pill; portal renders the menu */}
       {!hiddenColumns.status && (
-        <td className="py-2 px-2 w-36">
+        <td className="py-2 px-2 w-[128px]">
           <span
             ref={statusRefs.setReference as React.RefCallback<HTMLSpanElement>}
             className="block"
@@ -346,7 +346,7 @@ export function TaskRow({
 
       {/* Due date */}
       {!hiddenColumns.dueDate && (
-        <td className="py-2 px-3 w-28 text-center">
+        <td className="py-2 px-2 w-24 text-center">
           {editingDate ? (
             <input
               type="date"
@@ -391,7 +391,7 @@ export function TaskRow({
 
       {/* Priority — same portal pattern as status */}
       {!hiddenColumns.priority && (
-        <td className="py-2 px-2 w-28">
+        <td className="py-2 px-2 w-24">
           <span
             ref={priorityRefs.setReference as React.RefCallback<HTMLSpanElement>}
             className="block"
@@ -432,9 +432,9 @@ export function TaskRow({
 
       {/* Notes */}
       {!hiddenColumns.notes && (
-        <td className="py-2 px-3 min-w-[100px]">
+        <td className="py-2 px-3">
           <span
-            className="text-xs text-slate-400 truncate block max-w-[160px] cursor-default"
+            className="text-xs text-slate-400 truncate block cursor-default"
             title={task.notes}
           >
             {task.notes || ""}

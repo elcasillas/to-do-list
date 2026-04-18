@@ -226,31 +226,31 @@ export function GroupSection({
                     <th className="py-2.5 px-3 w-56 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                       Task
                     </th>
-                    <th className="py-2.5 px-3 w-[72px] text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <th className="py-2.5 px-1 w-14 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                       <MessageCircle className="w-3.5 h-3.5 mx-auto" />
                     </th>
                     {!hiddenColumns.owner && (
-                      <th className="py-2.5 px-3 w-[72px] text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-1 w-14 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                         Owner
                       </th>
                     )}
                     {!hiddenColumns.status && (
-                      <th className="py-2.5 px-2 w-36 text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-2 w-[128px] text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
                         Status
                       </th>
                     )}
                     {!hiddenColumns.dueDate && (
-                      <th className="py-2.5 px-3 w-28 text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-2 w-24 text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
                         Due date
                       </th>
                     )}
                     {!hiddenColumns.priority && (
-                      <th className="py-2.5 px-2 w-28 text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-2 w-24 text-center text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
                         Priority
                       </th>
                     )}
                     {!hiddenColumns.notes && (
-                      <th className="py-2.5 px-3 w-36 text-left text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-3 text-left text-[11px] font-semibold text-blue-500 uppercase tracking-wider">
                         Notes
                       </th>
                     )}
