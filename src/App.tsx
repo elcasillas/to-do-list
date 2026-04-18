@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckSquare, ChevronDown, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { ChevronDown, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { Toolbar } from "./components/Toolbar";
 import { TaskTable } from "./components/TaskTable";
 import { TaskModal } from "./components/TaskModal";
@@ -56,9 +56,7 @@ export default function App() {
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm flex-shrink-0">
-                <CheckSquare className="w-4 h-4 text-white" />
-              </div>
+              <img src="/To-Do-List-logo.png" alt="To Do List logo" className="h-8 w-auto flex-shrink-0" />
               <button className="flex items-center gap-1 group">
                 <h1 className="text-base font-bold text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
                   To Do List
