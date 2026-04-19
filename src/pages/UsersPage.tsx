@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
 import {
   Search,
   Plus,
@@ -15,6 +16,13 @@ import {
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
+import {
+  useFloating,
+  autoUpdate,
+  flip,
+  shift,
+  offset,
+} from "@floating-ui/react";
 import { Avatar } from "../components/ui/Avatar";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useAuthStore, isAdmin } from "../store/useAuthStore";
@@ -370,8 +378,16 @@ function ProfileActionsMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setOpen(false), open);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useClickOutside(wrapRef, () => setOpen(false), open);
+
+  const { refs, floatingStyles } = useFloating({
+    open,
+    strategy: "fixed",
+    placement: "bottom-end",
+    middleware: [offset(4), flip(), shift({ padding: 8 })],
+    whileElementsMounted: autoUpdate,
+  });
 
   const isSelf = user.id === currentUserId;
   const isLastAdmin = user.role === "admin" && adminCount <= 1;
@@ -379,16 +395,21 @@ function ProfileActionsMenu({
   const canDelete  = !isSelf && !isLastAdmin;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={wrapRef} className="relative inline-block">
       <button
+        ref={refs.setReference}
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1">
+      {open && ReactDOM.createPortal(
+        <div
+          ref={refs.setFloating}
+          style={floatingStyles}
+          className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
+        >
           <button
             onClick={() => { setOpen(false); onEdit(); }}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
@@ -420,7 +441,8 @@ function ProfileActionsMenu({
               </button>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -432,26 +454,40 @@ function InviteActionsMenu({
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setOpen(false), open);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useClickOutside(wrapRef, () => setOpen(false), open);
+
+  const { refs, floatingStyles } = useFloating({
+    open,
+    strategy: "fixed",
+    placement: "bottom-end",
+    middleware: [offset(4), flip(), shift({ padding: 8 })],
+    whileElementsMounted: autoUpdate,
+  });
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={wrapRef} className="relative inline-block">
       <button
+        ref={refs.setReference}
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1">
+      {open && ReactDOM.createPortal(
+        <div
+          ref={refs.setFloating}
+          style={floatingStyles}
+          className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
+        >
           <button
             onClick={() => { setOpen(false); onCancel(); }}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
             <X className="w-3.5 h-3.5" /> Cancel invite
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
