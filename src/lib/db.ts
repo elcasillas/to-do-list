@@ -315,6 +315,41 @@ export async function dbDeleteInvite(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ─── Admin user management (via Edge Functions) ───────────────
+
+export async function dbCreateUser(params: {
+  email: string;
+  password: string;
+  fullName: string;
+  role: UserRole;
+}): Promise<UserProfile> {
+  const { data, error } = await supabase.functions.invoke("admin-create-user", {
+    body: params,
+  });
+  if (error) throw new Error(error.message ?? "Edge function error");
+  if (data?.error) throw new Error(data.error);
+
+  // Fetch the freshly created profile row
+  const { data: row, error: profileErr } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", data.id)
+    .single();
+  if (profileErr) throw profileErr;
+  return dbToProfile(row);
+}
+
+export async function dbAdminUpdatePassword(
+  userId: string,
+  password: string
+): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("admin-update-password", {
+    body: { userId, password },
+  });
+  if (error) throw new Error(error.message ?? "Edge function error");
+  if (data?.error) throw new Error(data.error);
+}
+
 // ─── Batch order update (tasks) ───────────────────────────────
 
 export async function dbBatchUpdateOrders(
