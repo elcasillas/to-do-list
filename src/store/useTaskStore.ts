@@ -14,6 +14,7 @@ import {
   loadTaskUpdates as loadTaskUpdatesFromDb,
   dbInsertTaskUpdate,
   dbUpdateTaskUpdate,
+  dbDeleteTaskUpdate,
 } from "../lib/db";
 import type {
   Task,
@@ -161,6 +162,8 @@ interface TaskStore {
   loadTaskUpdates: (taskId: string) => Promise<void>;
   addTaskUpdate: (taskId: string, content: string) => void;
   editTaskUpdate: (updateId: string, taskId: string, content: string) => void;
+  /** Deletes an update. Pessimistic: DB write first, then local state. Returns error string on failure. */
+  deleteTaskUpdate: (updateId: string, taskId: string) => Promise<string | null>;
 }
 
 // ─── Store ────────────────────────────────────────────────────
@@ -473,6 +476,22 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
       },
     }));
     dbUpdateTaskUpdate(updateId, content).catch(console.error);
+  },
+
+  deleteTaskUpdate: async (updateId, taskId) => {
+    try {
+      await dbDeleteTaskUpdate(updateId);
+      set((state) => ({
+        updates: {
+          ...state.updates,
+          [taskId]: (state.updates[taskId] ?? []).filter((u) => u.id !== updateId),
+        },
+      }));
+      return null;
+    } catch (err) {
+      console.error("[deleteTaskUpdate]", err);
+      return err instanceof Error ? err.message : "Failed to delete update.";
+    }
   },
 }));
 

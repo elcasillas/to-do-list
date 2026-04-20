@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Loader2, MessageSquare, Pencil, Check, X } from "lucide-react";
+import { Loader2, MessageSquare, Pencil, Trash2, Check, X, AlertCircle } from "lucide-react";
 import { Avatar } from "./ui/Avatar";
 import { formatRelativeTime } from "../lib/utils";
 import { useTaskStore } from "../store/useTaskStore";
@@ -49,17 +49,24 @@ function isEdited(update: TaskUpdate): boolean {
 }
 
 function UpdateItem({ update }: { update: TaskUpdate }) {
-  const { editTaskUpdate } = useTaskStore();
+  const { editTaskUpdate, deleteTaskUpdate } = useTaskStore();
+
+  // ── Edit state ───────────────────────────────────────────────
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(update.content);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync draft if update.content changes externally (e.g. another save)
+  // ── Delete state ─────────────────────────────────────────────
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Sync draft if content changes externally
   useEffect(() => {
     if (!editing) setDraft(update.content);
   }, [update.content, editing]);
 
-  // Focus + move cursor to end when entering edit mode
+  // Focus textarea when entering edit mode
   useEffect(() => {
     if (editing && textareaRef.current) {
       const el = textareaRef.current;
@@ -68,7 +75,10 @@ function UpdateItem({ update }: { update: TaskUpdate }) {
     }
   }, [editing]);
 
+  // ── Edit handlers ────────────────────────────────────────────
   const startEdit = () => {
+    setConfirmDelete(false);
+    setDeleteError(null);
     setDraft(update.content);
     setEditing(true);
   };
@@ -81,22 +91,35 @@ function UpdateItem({ update }: { update: TaskUpdate }) {
   const save = () => {
     const trimmed = draft.trim();
     if (!trimmed) return;
-    if (trimmed === update.content) {
-      cancel();
-      return;
-    }
+    if (trimmed === update.content) { cancel(); return; }
     editTaskUpdate(update.id, update.taskId, trimmed);
     setEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      cancel();
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      save();
+    if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+  };
+
+  // ── Delete handlers ──────────────────────────────────────────
+  const requestDelete = () => {
+    setEditing(false);
+    setDeleteError(null);
+    setConfirmDelete(true);
+  };
+
+  const cancelDelete = () => setConfirmDelete(false);
+
+  const confirmAndDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    const err = await deleteTaskUpdate(update.id, update.taskId);
+    if (err) {
+      setDeleteError(err);
+      setDeleting(false);
+      setConfirmDelete(false);
     }
+    // On success the item is removed from the list; no state reset needed
   };
 
   const edited = isEdited(update);
@@ -114,29 +137,64 @@ function UpdateItem({ update }: { update: TaskUpdate }) {
         className="flex-shrink-0 mt-0.5"
       />
       <div className="flex-1 min-w-0">
-        {/* Header row */}
+        {/* ── Header row ──────────────────────────────────────── */}
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-sm font-semibold text-slate-800">
+          <span className="text-sm font-semibold text-slate-800 shrink-0">
             {update.authorName}
           </span>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-400 shrink-0">
             {formatRelativeTime(update.createdAt)}
           </span>
           {edited && !editing && (
-            <span className="text-xs text-slate-400 italic">Edited</span>
+            <span className="text-xs text-slate-400 italic shrink-0">Edited</span>
           )}
-          {!editing && (
-            <button
-              onClick={startEdit}
-              className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              title="Edit update"
-            >
-              <Pencil className="w-3 h-3" />
-            </button>
+
+          {/* Normal state: Edit + Delete icons on hover */}
+          {!editing && !confirmDelete && (
+            <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={startEdit}
+                className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Edit update"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+              <button
+                onClick={requestDelete}
+                className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                title="Delete update"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Confirm-delete state: inline prompt */}
+          {!editing && confirmDelete && (
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <span className="text-xs text-slate-500">Delete this update?</span>
+              <button
+                onClick={confirmAndDelete}
+                disabled={deleting}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+              >
+                {deleting
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <Trash2 className="w-3 h-3" />}
+                Delete
+              </button>
+              <button
+                onClick={cancelDelete}
+                disabled={deleting}
+                className="px-2 py-0.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Content or edit form */}
+        {/* ── Content / Edit form ──────────────────────────────── */}
         {editing ? (
           <div className="space-y-2">
             <textarea
@@ -169,9 +227,23 @@ function UpdateItem({ update }: { update: TaskUpdate }) {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-            {update.content}
-          </p>
+          <>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+              {update.content}
+            </p>
+            {deleteError && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                <span className="flex-1">{deleteError}</span>
+                <button
+                  onClick={() => setDeleteError(null)}
+                  className="text-red-400 hover:text-red-600 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
