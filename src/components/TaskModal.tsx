@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { X, User } from "lucide-react";
+import { X } from "lucide-react";
 import { useTaskStore } from "../store/useTaskStore";
+import { useAuthStore } from "../store/useAuthStore";
+import { loadProfiles } from "../lib/db";
 import { generateInitials, getAvatarColor } from "../lib/utils";
 import { STATUS_CONFIG } from "./ui/StatusPill";
 import { PRIORITY_CONFIG } from "./ui/PriorityPill";
 import { cn } from "../lib/utils";
-import type { Task, TaskStatus, TaskPriority } from "../types";
+import type { Task, TaskStatus, TaskPriority, UserProfile } from "../types";
 
 interface TaskModalProps {
   task?: Task | null;
@@ -18,52 +20,93 @@ const PRIORITIES = Object.keys(PRIORITY_CONFIG) as TaskPriority[];
 
 export function TaskModal({ task, defaultGroupId, onClose }: TaskModalProps) {
   const { groups, addTask, updateTask } = useTaskStore();
+  const { profile: currentProfile } = useAuthStore();
   const isEdit = !!task;
 
   const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
   const fallbackGroupId = sortedGroups[0]?.id || "";
 
-  const [title, setTitle] = useState(task?.title || "");
-  const [ownerName, setOwnerName] = useState(task?.owner?.name || "");
-  const [status, setStatus] = useState<TaskStatus>(task?.status || "not_started");
-  const [dueDate, setDueDate] = useState(task?.dueDate || "");
+  const [title, setTitle]       = useState(task?.title || "");
+  const [selectedOwnerId, setSelectedOwnerId] = useState("");
+  const [status, setStatus]     = useState<TaskStatus>(task?.status || "not_started");
+  const [dueDate, setDueDate]   = useState(task?.dueDate || "");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority || "medium");
-  const [notes, setNotes] = useState(task?.notes || "");
-  const [groupId, setGroupId] = useState(
+  const [notes, setNotes]       = useState(task?.notes || "");
+  const [groupId, setGroupId]   = useState(
     task?.groupId || defaultGroupId || fallbackGroupId
   );
   const [titleError, setTitleError] = useState(false);
 
+  // Users for the owner dropdown
+  const [users, setUsers]             = useState<UserProfile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError]   = useState(false);
+
+  // Fetch active users and initialise the owner selection
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    let cancelled = false;
+    (async () => {
+      try {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 8_000)
+        );
+        const all = await Promise.race([loadProfiles(), timeout]);
+        if (cancelled) return;
+
+        const active = all
+          .filter((u) => u.status === "active")
+          .sort((a, b) => a.fullName.localeCompare(b.fullName));
+        setUsers(active);
+
+        if (!isEdit) {
+          // New task — default to the current logged-in user
+          const self = active.find((u) => u.id === currentProfile?.id);
+          setSelectedOwnerId(self?.id ?? "");
+        } else {
+          // Editing — try to match the existing owner by name
+          const match = active.find((u) => u.fullName === task?.owner?.name);
+          if (!match && task?.owner?.name) {
+            console.warn("[TaskModal] Owner not found in active users:", task.owner.name);
+          }
+          setSelectedOwnerId(match?.id ?? "");
+        }
+      } catch {
+        if (!cancelled) setUsersError(true);
+      } finally {
+        if (!cancelled) setUsersLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setTitleError(true);
-      return;
-    }
+    if (!title.trim()) { setTitleError(true); return; }
 
-    const owner = ownerName.trim()
+    const selectedUser = users.find((u) => u.id === selectedOwnerId);
+    const owner = selectedUser
       ? {
-          name: ownerName.trim(),
-          initials: generateInitials(ownerName.trim()),
-          color: getAvatarColor(ownerName.trim()),
+          name:     selectedUser.fullName,
+          initials: generateInitials(selectedUser.fullName),
+          color:    getAvatarColor(selectedUser.fullName),
+          avatar:   selectedUser.avatarUrl ?? undefined,
         }
       : null;
 
     const payload = {
-      title: title.trim(),
+      title:     title.trim(),
       owner,
       status,
-      dueDate: dueDate || null,
+      dueDate:   dueDate || null,
       priority,
-      notes: notes.trim(),
+      notes:     notes.trim(),
       completed: status === "done",
       groupId,
     };
@@ -107,10 +150,7 @@ export function TaskModal({ task, defaultGroupId, onClose }: TaskModalProps) {
               <input
                 type="text"
                 value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  setTitleError(false);
-                }}
+                onChange={(e) => { setTitle(e.target.value); setTitleError(false); }}
                 placeholder="What needs to be done?"
                 autoFocus
                 className={cn(
@@ -136,9 +176,7 @@ export function TaskModal({ task, defaultGroupId, onClose }: TaskModalProps) {
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white transition"
               >
                 {sortedGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
+                  <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
             </div>
@@ -196,22 +234,39 @@ export function TaskModal({ task, defaultGroupId, onClose }: TaskModalProps) {
 
             {/* Owner + Due date */}
             <div className="grid grid-cols-2 gap-4">
+              {/* Owner dropdown */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
                   Owner
                 </label>
-                <div className="relative">
-                  <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={ownerName}
-                    onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder="Name (optional)"
-                    className="w-full pl-8 pr-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
-                  />
-                </div>
+                {usersError ? (
+                  <div className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-400 italic">
+                    Unable to load users
+                  </div>
+                ) : (
+                  <select
+                    value={selectedOwnerId}
+                    onChange={(e) => setSelectedOwnerId(e.target.value)}
+                    disabled={usersLoading}
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {usersLoading ? (
+                      <option value="">Loading users…</option>
+                    ) : (
+                      <>
+                        <option value="">— No owner —</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.fullName}{u.id === currentProfile?.id ? " (You)" : ""}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                )}
               </div>
 
+              {/* Due date */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">
                   Due date
