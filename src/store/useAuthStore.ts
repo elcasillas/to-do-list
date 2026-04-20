@@ -18,13 +18,19 @@ function dbToProfile(row: Record<string, unknown>): UserProfile {
 }
 
 async function fetchProfile(userId: string): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  if (error || !data) return null;
-  return dbToProfile(data);
+  try {
+    const fetchTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("fetchProfile timeout")), 8_000)
+    );
+    const { data, error } = await Promise.race([
+      supabase.from("profiles").select("*").eq("id", userId).single(),
+      fetchTimeout,
+    ]);
+    if (error || !data) return null;
+    return dbToProfile(data);
+  } catch {
+    return null;
+  }
 }
 
 interface AuthStore {

@@ -645,7 +645,16 @@ export function UsersPage() {
     setLoading(true);
     setError(null);
     try {
-      const [p, ac] = await Promise.all([loadProfiles(), dbAdminCount()]);
+      const fetchTimeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Request timed out. Check your connection and try again.")),
+          10_000
+        )
+      );
+      const [p, ac] = await Promise.race([
+        Promise.all([loadProfiles(), dbAdminCount()]),
+        fetchTimeout,
+      ]);
       setProfiles(p);
       setAdminCount(ac);
     } catch (e) {
