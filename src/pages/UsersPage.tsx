@@ -14,9 +14,7 @@ import {
   UserCheck,
   RefreshCw,
   ShieldAlert,
-  Eye,
-  EyeOff,
-  KeyRound,
+  Mail,
 } from "lucide-react";
 import {
   useFloating,
@@ -33,10 +31,9 @@ import {
   loadPendingInvites,
   dbUpdateProfile,
   dbDeleteProfile,
+  dbCreateInvite,
   dbDeleteInvite,
   dbAdminCount,
-  dbCreateUser,
-  dbAdminUpdatePassword,
 } from "../lib/db";
 import { cn, formatRelativeTime, generateInitials, getAvatarColor } from "../lib/utils";
 import type { UserProfile, UserRole, PendingInvite } from "../types";
@@ -135,92 +132,42 @@ function RoleSelect({
   );
 }
 
-// ── Shared password input ─────────────────────────────────────
+// ── Invite user modal ─────────────────────────────────────────
 
-function PasswordInput({
-  label,
-  value,
-  onChange,
-  show,
-  onToggle,
-  placeholder = "8+ characters",
-  autoComplete = "new-password",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  show: boolean;
-  onToggle: () => void;
-  placeholder?: string;
-  autoComplete?: string;
-}) {
-  return (
-    <Field label={label}>
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          tabIndex={-1}
-          className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </Field>
-  );
-}
-
-// ── Create user modal ─────────────────────────────────────────
-
-function CreateUserModal({
+function InviteUserModal({
+  currentUserId,
   onClose,
-  onCreated,
+  onInvited,
 }: {
+  currentUserId: string;
   onClose: () => void;
-  onCreated: (profile: UserProfile) => void;
+  onInvited: (invite: PendingInvite) => void;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<UserRole>("member");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validate = (): string | null => {
-    if (!fullName.trim()) return "Full name is required.";
-    if (!email.trim()) return "Email is required.";
-    if (password.length < 8) return "Password must be at least 8 characters.";
-    if (password !== confirm) return "Passwords do not match.";
-    return null;
-  };
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validationError = validate();
-    if (validationError) { setError(validationError); return; }
     setError(null);
+    if (!fullName.trim() || !email.trim()) {
+      setError("Name and email are required.");
+      return;
+    }
     setLoading(true);
     try {
-      const profile = await dbCreateUser({
+      const invite = await dbCreateInvite({
         email: email.trim(),
-        password,
         fullName: fullName.trim(),
         role,
+        invitedBy: currentUserId,
       });
-      onCreated(profile);
+      onInvited(invite);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create user.");
+      setError(err instanceof Error ? err.message : "Failed to create invite.");
     } finally {
       setLoading(false);
     }
@@ -233,7 +180,10 @@ function CreateUserModal({
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-900">Add user</h3>
+          <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <Mail className="w-4 h-4 text-blue-500" />
+            Add user
+          </h3>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -252,21 +202,10 @@ function CreateUserModal({
           <Field label="Role">
             <RoleSelect value={role} onChange={setRole} />
           </Field>
-          <PasswordInput
-            label="Password"
-            value={password}
-            onChange={setPassword}
-            show={showPw}
-            onToggle={() => setShowPw((v) => !v)}
-          />
-          <PasswordInput
-            label="Confirm password"
-            value={confirm}
-            onChange={setConfirm}
-            show={showPw}
-            onToggle={() => setShowPw((v) => !v)}
-            placeholder="Repeat password"
-          />
+
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            An invite record will be created. The user signs up with this email to claim their account and role.
+          </p>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -288,7 +227,7 @@ function CreateUserModal({
               className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Create user
+              Add user
             </button>
           </div>
         </form>
@@ -418,136 +357,6 @@ function EditUserModal({
   );
 }
 
-// ── Change password modal ─────────────────────────────────────
-
-function ChangePasswordModal({
-  user,
-  onClose,
-}: {
-  user: UserProfile;
-  onClose: () => void;
-}) {
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
-    if (password !== confirm) { setError("Passwords do not match."); return; }
-    setLoading(true);
-    try {
-      await dbAdminUpdatePassword(user.id, password);
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update password.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-slate-400" />
-            Change password
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {success ? (
-          <div className="px-6 py-8 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-              <Check className="w-6 h-6 text-emerald-600" />
-            </div>
-            <p className="text-sm font-semibold text-slate-800">Password updated</p>
-            <p className="text-sm text-slate-500">
-              {user.fullName}&apos;s password has been changed successfully.
-            </p>
-            <button
-              onClick={onClose}
-              className="mt-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={submit} className="px-6 py-5 space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-              <Avatar
-                owner={{
-                  name: user.fullName,
-                  initials: generateInitials(user.fullName),
-                  color: getAvatarColor(user.fullName),
-                  avatar: user.avatarUrl ?? undefined,
-                }}
-                size="md"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate">{user.fullName}</p>
-                <p className="text-xs text-slate-400 truncate">{user.email}</p>
-              </div>
-            </div>
-
-            <PasswordInput
-              label="New password"
-              value={password}
-              onChange={setPassword}
-              show={showPw}
-              onToggle={() => setShowPw((v) => !v)}
-            />
-            <PasswordInput
-              label="Confirm new password"
-              value={confirm}
-              onChange={setConfirm}
-              show={showPw}
-              onToggle={() => setShowPw((v) => !v)}
-              placeholder="Repeat password"
-            />
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || !password || !confirm}
-                className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Update password
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Hook: close on outside click, aware of floating portal ───
 // useClickOutside fires on mousedown which unmounts the portal before
@@ -587,7 +396,6 @@ function ProfileActionsMenu({
   currentUserId,
   adminCount,
   onEdit,
-  onChangePassword,
   onToggleStatus,
   onDelete,
 }: {
@@ -595,7 +403,6 @@ function ProfileActionsMenu({
   currentUserId: string;
   adminCount: number;
   onEdit: () => void;
-  onChangePassword: () => void;
   onToggleStatus: () => void;
   onDelete: () => void;
 }) {
@@ -646,12 +453,6 @@ function ProfileActionsMenu({
             className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
           >
             Edit user
-          </button>
-          <button
-            onClick={() => { setOpen(false); onChangePassword(); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <KeyRound className="w-3.5 h-3.5 text-slate-400" /> Change password
           </button>
 
           {canDisable && (
@@ -752,12 +553,11 @@ export function UsersPage() {
   const [search, setSearch]           = useState("");
   const [adminCount, setAdminCount]   = useState(0);
 
-  const [showCreate, setShowCreate]         = useState(false);
-  const [editUser, setEditUser]             = useState<UserProfile | null>(null);
-  const [changePasswordUser, setChangePasswordUser] = useState<UserProfile | null>(null);
-  const [deleteUser, setDeleteUser]         = useState<UserProfile | null>(null);
-  const [cancelInvite, setCancelInvite]     = useState<PendingInvite | null>(null);
-  const [toggleUser, setToggleUser]         = useState<UserProfile | null>(null);
+  const [showCreate, setShowCreate]     = useState(false);
+  const [editUser, setEditUser]         = useState<UserProfile | null>(null);
+  const [deleteUser, setDeleteUser]     = useState<UserProfile | null>(null);
+  const [cancelInvite, setCancelInvite] = useState<PendingInvite | null>(null);
+  const [toggleUser, setToggleUser]     = useState<UserProfile | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -805,9 +605,8 @@ export function UsersPage() {
   );
 
   // ── Handlers ─────────────────────────────────────────────────
-  const handleUserCreated = (profile: UserProfile) => {
-    setProfiles((prev) => [...prev, profile]);
-    if (profile.role === "admin") setAdminCount((c) => c + 1);
+  const handleInviteCreated = (invite: PendingInvite) => {
+    setInvites((prev) => [...prev, invite]);
   };
 
   const handleProfileSaved = (updated: UserProfile) => {
@@ -1003,7 +802,6 @@ export function UsersPage() {
                       currentUserId={currentProfile!.id}
                       adminCount={adminCount}
                       onEdit={() => setEditUser(user)}
-                      onChangePassword={() => setChangePasswordUser(user)}
                       onToggleStatus={() => setToggleUser(user)}
                       onDelete={() => setDeleteUser(user)}
                     />
@@ -1054,17 +852,11 @@ export function UsersPage() {
       </div>
 
       {/* Modals */}
-      {showCreate && (
-        <CreateUserModal
+      {showCreate && currentProfile && (
+        <InviteUserModal
+          currentUserId={currentProfile.id}
           onClose={() => setShowCreate(false)}
-          onCreated={handleUserCreated}
-        />
-      )}
-
-      {changePasswordUser && (
-        <ChangePasswordModal
-          user={changePasswordUser}
-          onClose={() => setChangePasswordUser(null)}
+          onInvited={handleInviteCreated}
         />
       )}
 
