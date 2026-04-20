@@ -106,13 +106,7 @@ function TasksView() {
   }>({ open: false });
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const ok = await useAuthStore.getState().ensureSession();
-      // If !ok, signOut() was called and the component will unmount via auth state change
-      if (!cancelled && ok) loadData();
-    })();
-    return () => { cancelled = true; };
+    loadData();
   }, []);
 
   const openAddTask = (groupId?: string) => {

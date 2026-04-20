@@ -195,17 +195,22 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
 
   // ── Bootstrap ────────────────────────────────────────────────
   loadData: async () => {
-    set({ loading: true, error: null });
+    // Only show the full-page spinner on first load when there's nothing to display.
+    // On subsequent calls (e.g. navigating back to tasks) refresh silently so the
+    // user never sees a spinner over data they already have.
+    const hasData = get().groups.length > 0;
+    if (!hasData) set({ loading: true, error: null });
+
     try {
       const fetchTimeout = new Promise<never>((_, reject) =>
         setTimeout(
           () => reject(new Error("Request timed out. Check your connection and try again.")),
-          15_000
+          10_000
         )
       );
       const { groups, tasks } = await Promise.race([loadAllData(), fetchTimeout]);
 
-      if (groups.length === 0) {
+      if (groups.length === 0 && !hasData) {
         // First run — seed default data
         await seedData(DEFAULT_GROUPS, SEED_TASKS);
         set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS });
@@ -220,7 +225,8 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
           : typeof err === "object" && err !== null && "message" in err
           ? String((err as Record<string, unknown>).message)
           : JSON.stringify(err);
-      set({ error: msg });
+      // Only surface the error if we had no data to fall back on
+      if (!hasData) set({ error: msg });
     } finally {
       set({ loading: false });
     }

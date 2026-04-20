@@ -645,8 +645,6 @@ export function UsersPage() {
     setLoading(true);
     setError(null);
     try {
-      const ok = await useAuthStore.getState().ensureSession();
-      if (!ok) return; // signOut() already called; component will unmount
       const [p, ac] = await Promise.all([loadProfiles(), dbAdminCount()]);
       setProfiles(p);
       setAdminCount(ac);
