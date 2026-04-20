@@ -49,6 +49,11 @@ interface AuthStore {
   updatePassword: (password: string) => Promise<string | null>;
   /** Reload profile from DB (e.g. after an admin changes your role). */
   refreshProfile: () => Promise<void>;
+  /**
+   * Confirms the session is alive, attempting a token refresh if needed.
+   * Returns true if valid, false if expired (also signs out in that case).
+   */
+  ensureSession: () => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthStore>()((set, get) => ({
@@ -132,6 +137,17 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     if (!session) return;
     const profile = await fetchProfile(session.user.id);
     if (profile) set({ profile });
+  },
+
+  ensureSession: async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return true;
+    // Token may be expired — attempt a silent refresh
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (refreshed) return true;
+    // Refresh token is also dead — sign out cleanly
+    await get().signOut();
+    return false;
   },
 }));
 

@@ -197,14 +197,20 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   loadData: async () => {
     set({ loading: true, error: null });
     try {
-      const { groups, tasks } = await loadAllData();
+      const fetchTimeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Request timed out. Check your connection and try again.")),
+          15_000
+        )
+      );
+      const { groups, tasks } = await Promise.race([loadAllData(), fetchTimeout]);
 
       if (groups.length === 0) {
         // First run — seed default data
         await seedData(DEFAULT_GROUPS, SEED_TASKS);
-        set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS, loading: false });
+        set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS });
       } else {
-        set({ groups, tasks, loading: false });
+        set({ groups, tasks });
       }
     } catch (err) {
       console.error("[loadData] Supabase error:", err);
@@ -214,7 +220,9 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
           : typeof err === "object" && err !== null && "message" in err
           ? String((err as Record<string, unknown>).message)
           : JSON.stringify(err);
-      set({ error: msg, loading: false });
+      set({ error: msg });
+    } finally {
+      set({ loading: false });
     }
   },
 
