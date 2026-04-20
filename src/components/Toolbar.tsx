@@ -6,7 +6,6 @@ import {
   ArrowUpDown,
   Eye,
   EyeOff,
-  Layers,
   X,
   ChevronDown,
   Check,
@@ -374,11 +373,6 @@ export function Toolbar({ onAddTask }: ToolbarProps) {
         </span>
       )}
 
-      {/* Group by (decorative) */}
-      <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-        <Layers className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Group by</span>
-      </button>
     </div>
   );
 }

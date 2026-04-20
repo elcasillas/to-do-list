@@ -285,14 +285,6 @@ function AuthenticatedApp() {
             </div>
           </div>
 
-          {/* Sub-nav (tasks page only) */}
-          {currentPage === "tasks" && (
-            <div className="flex items-center -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 border-t border-slate-100">
-              <button className="px-4 py-2 text-xs font-semibold text-blue-600 border-b-2 border-blue-600 -mb-px">
-                Main table
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
