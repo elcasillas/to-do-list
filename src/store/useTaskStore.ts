@@ -12,6 +12,7 @@ import {
   dbDeleteTask,
   dbBatchUpdateOrders,
   loadTaskUpdates as loadTaskUpdatesFromDb,
+  loadUpdateCounts,
   dbInsertTaskUpdate,
   dbUpdateTaskUpdate,
   dbDeleteTaskUpdate,
@@ -136,6 +137,8 @@ interface TaskStore {
   selectedTaskId: string | null;
   updates: Record<string, TaskUpdate[]>;
   updatesLoading: boolean;
+  /** taskId → total update count; populated on initial load, kept in sync on add/delete. */
+  updateCounts: Record<string, number>;
 
   loadData: () => Promise<void>;
 
@@ -195,6 +198,7 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   selectedTaskId: null,
   updates: {},
   updatesLoading: false,
+  updateCounts: {},
 
   // ── Bootstrap ────────────────────────────────────────────────
   loadData: async () => {
@@ -211,14 +215,17 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
           10_000
         )
       );
-      const { groups, tasks } = await Promise.race([loadAllData(), fetchTimeout]);
+      const [{ groups, tasks }, updateCounts] = await Promise.race([
+        Promise.all([loadAllData(), loadUpdateCounts()]),
+        fetchTimeout,
+      ]);
 
       if (groups.length === 0 && !hasData) {
         // First run — seed default data
         await seedData(DEFAULT_GROUPS, SEED_TASKS);
-        set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS });
+        set({ groups: DEFAULT_GROUPS, tasks: SEED_TASKS, updateCounts: {} });
       } else {
-        set({ groups, tasks });
+        set({ groups, tasks, updateCounts });
       }
     } catch (err) {
       console.error("[loadData] Supabase error:", err);
@@ -436,6 +443,8 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
       set((state) => ({
         updates: { ...state.updates, [taskId]: fetched },
         updatesLoading: false,
+        // Authoritative count from the full fetch — keeps badge in sync
+        updateCounts: { ...state.updateCounts, [taskId]: fetched.length },
       }));
     } catch (err) {
       console.error("[loadTaskUpdates]", err);
@@ -461,6 +470,10 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
         ...state.updates,
         [taskId]: [update, ...(state.updates[taskId] ?? [])],
       },
+      updateCounts: {
+        ...state.updateCounts,
+        [taskId]: (state.updateCounts[taskId] ?? 0) + 1,
+      },
     }));
     dbInsertTaskUpdate(update).catch(console.error);
   },
@@ -485,6 +498,10 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
         updates: {
           ...state.updates,
           [taskId]: (state.updates[taskId] ?? []).filter((u) => u.id !== updateId),
+        },
+        updateCounts: {
+          ...state.updateCounts,
+          [taskId]: Math.max(0, (state.updateCounts[taskId] ?? 1) - 1),
         },
       }));
       return null;

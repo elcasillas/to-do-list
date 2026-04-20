@@ -96,7 +96,7 @@ export function TaskRow({
   hiddenColumns,
   groups,
 }: TaskRowProps) {
-  const { updateTask, duplicateTask, moveBetweenGroups, selectTask, selectedTaskId, updates } =
+  const { updateTask, duplicateTask, moveBetweenGroups, selectTask, selectedTaskId, updates, updateCounts } =
     useTaskStore();
   const isSelected = selectedTaskId === task.id;
 
@@ -286,9 +286,9 @@ export function TaskRow({
             title="Open updates"
           >
             <MessageCircle className="w-4 h-4" />
-            {(updates[task.id]?.length ?? 0) > 0 && (
+            {(updateCounts[task.id] ?? 0) > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
-                {updates[task.id].length}
+                {updateCounts[task.id]}
               </span>
             )}
           </button>

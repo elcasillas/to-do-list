@@ -181,6 +181,20 @@ function dbToTaskUpdate(row: Record<string, unknown>): TaskUpdate {
   };
 }
 
+// Fetches only task_id from every update row — lightweight count aggregation.
+// Returns a map of taskId → update count for the full task list.
+export async function loadUpdateCounts(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from("task_updates")
+    .select("task_id");
+  if (error) throw error;
+  const counts: Record<string, number> = {};
+  (data ?? []).forEach((row: { task_id: string }) => {
+    counts[row.task_id] = (counts[row.task_id] ?? 0) + 1;
+  });
+  return counts;
+}
+
 export async function loadTaskUpdates(taskId: string): Promise<TaskUpdate[]> {
   const { data, error } = await supabase
     .from("task_updates")
