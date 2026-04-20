@@ -9,13 +9,14 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Plus } from "lucide-react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { Plus, GripVertical, X } from "lucide-react";
 import { GroupSection } from "./GroupSection";
 import { StatusPill } from "./ui/StatusPill";
 import { PriorityPill } from "./ui/PriorityPill";
 import { useTaskStore, getFilteredGroupTasks } from "../store/useTaskStore";
 import { cn } from "../lib/utils";
-import type { Task } from "../types";
+import type { Task, Group } from "../types";
 
 interface TaskTableProps {
   onEditTask: (task: Task) => void;
@@ -23,7 +24,7 @@ interface TaskTableProps {
   onAddTask: (groupId?: string) => void;
 }
 
-function DragOverlayContent({ task }: { task: Task }) {
+function TaskDragOverlayContent({ task }: { task: Task }) {
   return (
     <div className="bg-white shadow-2xl rounded-xl border border-blue-300 px-4 py-3 flex items-center gap-3 opacity-95 max-w-md">
       <input type="checkbox" checked={task.completed} readOnly className="w-3.5 h-3.5" />
@@ -41,11 +42,26 @@ function DragOverlayContent({ task }: { task: Task }) {
   );
 }
 
+function GroupDragOverlayContent({ group }: { group: Group }) {
+  return (
+    <div className="bg-white shadow-xl rounded-xl border border-slate-300 px-4 py-2.5 flex items-center gap-2 opacity-95">
+      <GripVertical className="w-4 h-4 text-slate-400" />
+      <span className="text-sm font-bold" style={{ color: group.color }}>
+        {group.name}
+      </span>
+    </div>
+  );
+}
+
 export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProps) {
-  const { tasks, groups, filter, sort, hiddenColumns, showDoneTasks, reorderTasks, moveBetweenGroups, addGroup } =
-    useTaskStore();
+  const {
+    tasks, groups, filter, sort, hiddenColumns, showDoneTasks,
+    reorderTasks, moveBetweenGroups, addGroup,
+    reorderGroups, groupReorderError, clearGroupReorderError,
+  } = useTaskStore();
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [activeGroup, setActiveGroup] = useState<Group | null>(null);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
 
@@ -56,25 +72,41 @@ export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProp
   const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
 
   function handleDragStart(event: DragStartEvent) {
-    const task = tasks.find((t) => t.id === event.active.id);
-    setActiveTask(task || null);
+    const type = event.active.data.current?.type as string | undefined;
+    if (type === "group") {
+      const group = groups.find((g) => g.id === event.active.id);
+      setActiveGroup(group ?? null);
+      setActiveTask(null);
+    } else {
+      const task = tasks.find((t) => t.id === event.active.id);
+      setActiveTask(task ?? null);
+      setActiveGroup(null);
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveTask(null);
+    setActiveGroup(null);
     if (!over) return;
 
     const activeId = active.id as string;
     const overId = over.id as string;
     if (activeId === overId) return;
 
-    const activeTask = tasks.find((t) => t.id === activeId);
-    if (!activeTask) return;
+    const activeType = active.data.current?.type as string | undefined;
+
+    if (activeType === "group") {
+      reorderGroups(activeId, overId);
+      return;
+    }
+
+    const activeTaskItem = tasks.find((t) => t.id === activeId);
+    if (!activeTaskItem) return;
 
     const overGroup = groups.find((g) => g.id === overId);
     if (overGroup) {
-      if (activeTask.groupId !== overGroup.id) {
+      if (activeTaskItem.groupId !== overGroup.id) {
         moveBetweenGroups(activeId, overGroup.id);
       }
       return;
@@ -83,8 +115,8 @@ export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProp
     const overTask = tasks.find((t) => t.id === overId);
     if (!overTask) return;
 
-    if (activeTask.groupId === overTask.groupId) {
-      reorderTasks(activeTask.groupId, activeId, overId);
+    if (activeTaskItem.groupId === overTask.groupId) {
+      reorderTasks(activeTaskItem.groupId, activeId, overId);
     } else {
       moveBetweenGroups(activeId, overTask.groupId, overId);
     }
@@ -106,21 +138,35 @@ export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProp
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {sortedGroups.map((group) => {
-        const groupTasks = getFilteredGroupTasks(tasks, group.id, filter, sort, showDoneTasks);
-        return (
-          <GroupSection
-            key={group.id}
-            group={group}
-            tasks={groupTasks}
-            onEditTask={onEditTask}
-            onDeleteTask={onDeleteTask}
-            onAddTask={onAddTask}
-            hiddenColumns={hiddenColumns}
-            allGroups={sortedGroups}
-          />
-        );
-      })}
+      {groupReorderError && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+          <span className="flex-1">{groupReorderError}</span>
+          <button
+            onClick={clearGroupReorderError}
+            className="text-red-400 hover:text-red-600 transition-colors flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <SortableContext items={sortedGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
+        {sortedGroups.map((group) => {
+          const groupTasks = getFilteredGroupTasks(tasks, group.id, filter, sort, showDoneTasks);
+          return (
+            <GroupSection
+              key={group.id}
+              group={group}
+              tasks={groupTasks}
+              onEditTask={onEditTask}
+              onDeleteTask={onDeleteTask}
+              onAddTask={onAddTask}
+              hiddenColumns={hiddenColumns}
+              allGroups={sortedGroups}
+            />
+          );
+        })}
+      </SortableContext>
 
       {/* Add group */}
       <div className="mt-2">
@@ -169,7 +215,8 @@ export function TaskTable({ onEditTask, onDeleteTask, onAddTask }: TaskTableProp
       </div>
 
       <DragOverlay>
-        {activeTask ? <DragOverlayContent task={activeTask} /> : null}
+        {activeTask ? <TaskDragOverlayContent task={activeTask} /> : null}
+        {activeGroup ? <GroupDragOverlayContent group={activeGroup} /> : null}
       </DragOverlay>
     </DndContext>
   );

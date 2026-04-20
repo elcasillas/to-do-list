@@ -388,3 +388,15 @@ export async function dbBatchUpdateOrders(
     )
   );
 }
+
+// ─── Batch order update (groups) ──────────────────────────────
+
+export async function dbBatchUpdateGroupOrders(
+  items: { id: string; order: number }[]
+): Promise<void> {
+  await Promise.all(
+    items.map(({ id, order }) =>
+      supabase.from("groups").update({ sort_order: order }).eq("id", id)
+    )
+  );
+}

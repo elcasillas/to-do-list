@@ -8,9 +8,10 @@ import {
   Trash2,
   Check,
   MessageCircle,
+  GripVertical,
 } from "lucide-react";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { TaskRow } from "./TaskRow";
 import { TaskCard } from "./TaskCard";
 import { useTaskStore } from "../store/useTaskStore";
@@ -57,7 +58,20 @@ export function GroupSection({
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, () => setShowGroupMenu(false), showGroupMenu);
 
-  const { setNodeRef, isOver } = useDroppable({ id: group.id });
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({ id: group.id, data: { type: "group" } });
+
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const commitName = () => {
     setEditingName(false);
@@ -81,9 +95,18 @@ export function GroupSection({
     1; // actions
 
   return (
-    <div className="mb-6">
+    <div ref={setNodeRef} style={dragStyle} className={cn("mb-6", isDragging && "opacity-50")}>
       {/* Group header */}
       <div className="flex items-center gap-1.5 mb-2 px-1 group/header">
+        <button
+          {...listeners}
+          {...attributes}
+          tabIndex={-1}
+          title="Drag to reorder"
+          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-slate-500 transition-colors opacity-0 group-hover/header:opacity-100"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
         <button
           onClick={() => toggleGroup(group.id)}
           className="p-1 rounded hover:bg-slate-100 transition-colors text-slate-500"
@@ -211,7 +234,6 @@ export function GroupSection({
         <>
           {/* Desktop table view */}
           <div
-            ref={setNodeRef}
             className={cn(
               "hidden sm:block rounded-xl border border-slate-200 overflow-hidden transition-colors",
               isOver && "ring-2 ring-blue-400 ring-offset-1"

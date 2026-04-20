@@ -11,6 +11,7 @@ import {
   dbUpdateTask,
   dbDeleteTask,
   dbBatchUpdateOrders,
+  dbBatchUpdateGroupOrders,
   loadTaskUpdates as loadTaskUpdatesFromDb,
   loadUpdateCounts,
   dbInsertTaskUpdate,
@@ -132,6 +133,7 @@ interface TaskStore {
   showDoneTasks: boolean;
   loading: boolean;
   error: string | null;
+  groupReorderError: string | null;
 
   // Side panel
   selectedTaskId: string | null;
@@ -153,6 +155,8 @@ interface TaskStore {
   updateGroup: (id: string, updates: Partial<Group>) => void;
   deleteGroup: (id: string) => void;
   toggleGroup: (id: string) => void;
+  reorderGroups: (activeId: string, overId: string) => Promise<void>;
+  clearGroupReorderError: () => void;
 
   setFilter: (filter: Partial<FilterState>) => void;
   clearFilters: () => void;
@@ -195,6 +199,7 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   showDoneTasks: readShowDoneTasks(),
   loading: true,
   error: null,
+  groupReorderError: null,
   selectedTaskId: null,
   updates: {},
   updatesLoading: false,
@@ -392,6 +397,32 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
     set({ groups: groups.map((g) => (g.id === id ? { ...g, collapsed } : g)) });
     dbUpdateGroup(id, { collapsed }).catch(console.error);
   },
+
+  reorderGroups: async (activeId, overId) => {
+    const { groups } = get();
+    const sorted = [...groups].sort((a, b) => a.order - b.order);
+    const activeIdx = sorted.findIndex((g) => g.id === activeId);
+    const overIdx = sorted.findIndex((g) => g.id === overId);
+    if (activeIdx === -1 || overIdx === -1) return;
+
+    const reordered = [...sorted];
+    const [moved] = reordered.splice(activeIdx, 1);
+    reordered.splice(overIdx, 0, moved);
+    const newGroups = reordered.map((g, i) => ({ ...g, order: i }));
+
+    set({ groups: newGroups, groupReorderError: null });
+
+    try {
+      await dbBatchUpdateGroupOrders(newGroups.map((g) => ({ id: g.id, order: g.order })));
+    } catch (err) {
+      set({
+        groups,
+        groupReorderError: err instanceof Error ? err.message : "Failed to save group order.",
+      });
+    }
+  },
+
+  clearGroupReorderError: () => set({ groupReorderError: null }),
 
   // ── Filter / sort (local only) ───────────────────────────────
   setFilter: (filter) => {
