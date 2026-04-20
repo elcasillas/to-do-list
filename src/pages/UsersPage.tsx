@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ReactDOM from "react-dom";
 import {
   Search,
@@ -28,7 +28,6 @@ import {
 import { Avatar } from "../components/ui/Avatar";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useAuthStore, isAdmin } from "../store/useAuthStore";
-import { useClickOutside } from "../hooks/useClickOutside";
 import {
   loadProfiles,
   loadPendingInvites,
@@ -550,6 +549,37 @@ function ChangePasswordModal({
   );
 }
 
+// ── Hook: close on outside click, aware of floating portal ───
+// useClickOutside fires on mousedown which unmounts the portal before
+// the click event reaches the menu button — callbacks never fire.
+// This hook checks BOTH the reference and the floating element.
+
+function useFloatingClickOutside(
+  refEl: React.RefObject<HTMLElement | null>,
+  floatEl: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+  enabled: boolean
+) {
+  const handler = useCallback(
+    (e: MouseEvent) => {
+      if (
+        refEl.current?.contains(e.target as Node) ||
+        floatEl.current?.contains(e.target as Node)
+      ) return;
+      onClose();
+    },
+    [refEl, floatEl, onClose]
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    // Use mousedown so the menu closes when clicking elsewhere,
+    // but we intentionally skip it when the target is inside the portal.
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [enabled, handler]);
+}
+
 // ── Row actions menu ──────────────────────────────────────────
 
 function ProfileActionsMenu({
@@ -570,8 +600,6 @@ function ProfileActionsMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useClickOutside(wrapRef, () => setOpen(false), open);
 
   const { refs, floatingStyles } = useFloating({
     open,
@@ -581,15 +609,23 @@ function ProfileActionsMenu({
     whileElementsMounted: autoUpdate,
   });
 
+  const refEl   = useRef<HTMLElement | null>(null);
+  const floatEl = useRef<HTMLElement | null>(null);
+
+  useFloatingClickOutside(refEl, floatEl, () => setOpen(false), open);
+
   const isSelf = user.id === currentUserId;
   const isLastAdmin = user.role === "admin" && adminCount <= 1;
   const canDisable = !isSelf && !isLastAdmin;
   const canDelete  = !isSelf && !isLastAdmin;
 
   return (
-    <div ref={wrapRef} className="relative inline-block">
+    <div className="relative inline-block">
       <button
-        ref={refs.setReference}
+        ref={(el) => {
+          refs.setReference(el);
+          refEl.current = el;
+        }}
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
       >
@@ -598,7 +634,10 @@ function ProfileActionsMenu({
 
       {open && ReactDOM.createPortal(
         <div
-          ref={refs.setFloating}
+          ref={(el) => {
+            refs.setFloating(el);
+            floatEl.current = el;
+          }}
           style={floatingStyles}
           className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
         >
@@ -652,8 +691,6 @@ function InviteActionsMenu({
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useClickOutside(wrapRef, () => setOpen(false), open);
 
   const { refs, floatingStyles } = useFloating({
     open,
@@ -663,10 +700,18 @@ function InviteActionsMenu({
     whileElementsMounted: autoUpdate,
   });
 
+  const refEl   = useRef<HTMLElement | null>(null);
+  const floatEl = useRef<HTMLElement | null>(null);
+
+  useFloatingClickOutside(refEl, floatEl, () => setOpen(false), open);
+
   return (
-    <div ref={wrapRef} className="relative inline-block">
+    <div className="relative inline-block">
       <button
-        ref={refs.setReference}
+        ref={(el) => {
+          refs.setReference(el);
+          refEl.current = el;
+        }}
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
       >
@@ -674,7 +719,10 @@ function InviteActionsMenu({
       </button>
       {open && ReactDOM.createPortal(
         <div
-          ref={refs.setFloating}
+          ref={(el) => {
+            refs.setFloating(el);
+            floatEl.current = el;
+          }}
           style={floatingStyles}
           className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
         >
