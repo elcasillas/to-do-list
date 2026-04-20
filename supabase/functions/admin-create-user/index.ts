@@ -20,20 +20,16 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Missing authorization header" }, 401);
 
-    // Admin client — uses service role key, bypasses RLS
+    // Admin client — service role key bypasses RLS
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Verify caller identity
-    const callerClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user: caller }, error: callerErr } = await callerClient.auth.getUser();
+    // Verify caller's JWT using the admin client
+    const jwt = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user: caller }, error: callerErr } = await adminClient.auth.getUser(jwt);
     if (callerErr || !caller) return json({ error: "Unauthorized" }, 401);
 
     // Enforce admin-only access
@@ -51,7 +47,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "email, password, and fullName are required" }, 400);
     }
 
-    // Create auth user (email_confirm: true skips the confirmation email)
+    // Create auth user — email_confirm: true skips confirmation email
     const { data: { user }, error: createErr } = await adminClient.auth.admin.createUser({
       email: email.toLowerCase().trim(),
       password,
@@ -75,6 +71,8 @@ Deno.serve(async (req: Request) => {
 
     return json({ id: user.id });
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 400);
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[admin-create-user]", message);
+    return json({ error: message }, 400);
   }
 });

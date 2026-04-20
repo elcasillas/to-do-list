@@ -20,19 +20,16 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Missing authorization header" }, 401);
 
+    // Admin client — service role key bypasses RLS
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Verify caller identity
-    const callerClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user: caller }, error: callerErr } = await callerClient.auth.getUser();
+    // Verify caller's JWT using the admin client
+    const jwt = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user: caller }, error: callerErr } = await adminClient.auth.getUser(jwt);
     if (callerErr || !caller) return json({ error: "Unauthorized" }, 401);
 
     // Enforce admin-only access
@@ -58,6 +55,8 @@ Deno.serve(async (req: Request) => {
 
     return json({ success: true });
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 400);
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[admin-update-password]", message);
+    return json({ error: message }, 400);
   }
 });
