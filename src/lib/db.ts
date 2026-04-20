@@ -317,6 +317,23 @@ export async function dbDeleteInvite(id: string): Promise<void> {
 
 // ─── Admin user management (via Edge Functions) ───────────────
 
+// Supabase JS puts non-2xx edge function bodies on error.context (a Response).
+// This helper extracts the real message so the UI can show it.
+async function invokeEdgeFn(name: string, body: unknown): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.functions.invoke(name, { body: body as Record<string, unknown> });
+  if (error) {
+    let message = error.message ?? "Edge function error";
+    try {
+      const ctx = (error as unknown as { context?: Response }).context;
+      const parsed = await ctx?.json();
+      if (parsed?.error) message = String(parsed.error);
+    } catch { /* ignore parse failures */ }
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(String(data.error));
+  return data as Record<string, unknown>;
+}
+
 export async function dbCreateUser(params: {
   email: string;
   password: string;
@@ -324,17 +341,13 @@ export async function dbCreateUser(params: {
   role: UserRole;
   status?: "active" | "disabled";
 }): Promise<UserProfile> {
-  const { data, error } = await supabase.functions.invoke("admin-create-user", {
-    body: params,
-  });
-  if (error) throw new Error(error.message ?? "Edge function error");
-  if (data?.error) throw new Error(data.error);
+  const result = await invokeEdgeFn("admin-create-user", params);
 
   // Fetch the freshly created profile row
   const { data: row, error: profileErr } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", data.id)
+    .eq("id", result.id)
     .single();
   if (profileErr) throw profileErr;
   return dbToProfile(row);
@@ -344,11 +357,7 @@ export async function dbAdminUpdatePassword(
   userId: string,
   password: string
 ): Promise<void> {
-  const { data, error } = await supabase.functions.invoke("admin-update-password", {
-    body: { userId, password },
-  });
-  if (error) throw new Error(error.message ?? "Edge function error");
-  if (data?.error) throw new Error(data.error);
+  await invokeEdgeFn("admin-update-password", { userId, password });
 }
 
 // ─── Batch order update (tasks) ───────────────────────────────
