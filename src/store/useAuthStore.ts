@@ -69,37 +69,66 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   recoveryMode: false,
 
   initialize: async () => {
-    // Resolve current session synchronously
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (session) {
-      const profile = await fetchProfile(session.user.id);
-      set({ session, profile, loading: false });
+    // ── 1. Resolve initial session ────────────────────────────
+    const { data: { session: initialSession } } = await supabase.auth.getSession();
+    if (initialSession) {
+      const profile = await fetchProfile(initialSession.user.id);
+      set({ session: initialSession, profile, loading: false });
     } else {
       set({ loading: false });
     }
 
-    // Subscribe to future auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "PASSWORD_RECOVERY") {
-        // User clicked a reset link — show the reset-password form
-        set({ session, recoveryMode: true, loading: false });
-        return;
-      }
+    // ── 2. Subscribe to future auth events ───────────────────
+    // Key invariant: when a valid session arrives (TOKEN_REFRESHED, SIGNED_IN,
+    // etc.) we update the session object immediately so API calls keep working,
+    // then fetch the profile in the background.  We do NOT overwrite an
+    // existing profile with null — a fetchProfile timeout must not make the UI
+    // look like the user is logged out when the session is still valid.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        if (event === "PASSWORD_RECOVERY") {
+          set({ session: newSession, recoveryMode: true, loading: false });
+          return;
+        }
 
-      if (session) {
+        if (newSession) {
+          // Persist the fresh session token immediately
+          set({ session: newSession, loading: false, recoveryMode: false });
+          // Refresh profile in the background; keep existing profile on failure
+          const profile = await fetchProfile(newSession.user.id);
+          if (profile) set({ profile });
+        } else {
+          // Genuine sign-out (user action or expired refresh token)
+          set({ session: null, profile: null, loading: false, recoveryMode: false });
+        }
+      }
+    );
+
+    // ── 3. Re-sync on tab visibility ──────────────────────────
+    // Supabase can fire a spurious SIGNED_OUT when the background token-refresh
+    // request fails due to a network hiccup, clearing the store session even
+    // though the session is still in localStorage.  When the tab regains focus
+    // we check storage and restore state if the session is still there.
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== "visible") return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const { session: storeSession } = get();
+
+      if (session && !storeSession) {
+        // Session survived in storage but the store was incorrectly cleared
         const profile = await fetchProfile(session.user.id);
-        set({ session, profile, loading: false, recoveryMode: false });
-      } else {
-        set({ session: null, profile: null, loading: false, recoveryMode: false });
+        set({ session, profile: profile ?? get().profile, loading: false, recoveryMode: false });
+      } else if (!session && storeSession) {
+        // Storage confirms no session — clear any stale store state
+        set({ session: null, profile: null, loading: false });
       }
-    });
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   },
 
   signIn: async (email, password) => {
