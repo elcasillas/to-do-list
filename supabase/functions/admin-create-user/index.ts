@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Forbidden: admin access required" }, 403);
     }
 
-    const { email, password, fullName, role } = await req.json();
+    const { email, password, fullName, role, status } = await req.json();
     if (!email || !password || !fullName) {
       return json({ error: "email, password, and fullName are required" }, 400);
     }
@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
       full_name: fullName.trim(),
       email: email.toLowerCase().trim(),
       role: role ?? "member",
-      status: "active",
+      status: status ?? "active",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

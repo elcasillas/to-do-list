@@ -14,7 +14,9 @@ import {
   UserCheck,
   RefreshCw,
   ShieldAlert,
-  Mail,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from "lucide-react";
 import {
   useFloating,
@@ -28,15 +30,14 @@ import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useAuthStore, isAdmin } from "../store/useAuthStore";
 import {
   loadProfiles,
-  loadPendingInvites,
   dbUpdateProfile,
   dbDeleteProfile,
-  dbCreateInvite,
-  dbDeleteInvite,
   dbAdminCount,
+  dbCreateUser,
+  dbAdminUpdatePassword,
 } from "../lib/db";
 import { cn, formatRelativeTime, generateInitials, getAvatarColor } from "../lib/utils";
-import type { UserProfile, UserRole, PendingInvite } from "../types";
+import type { UserProfile, UserRole } from "../types";
 
 // ── Role / status config ──────────────────────────────────────
 
@@ -70,15 +71,9 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_CONFIG }) {
   );
 }
 
-// ── Shared form field ─────────────────────────────────────────
+// ── Shared form primitives ────────────────────────────────────
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <label className="block text-sm font-medium text-slate-700">{label}</label>
@@ -93,12 +88,14 @@ function TextInput({
   placeholder,
   type = "text",
   required,
+  autoComplete,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
   required?: boolean;
+  autoComplete?: string;
 }) {
   return (
     <input
@@ -107,18 +104,13 @@ function TextInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       required={required}
+      autoComplete={autoComplete}
       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
     />
   );
 }
 
-function RoleSelect({
-  value,
-  onChange,
-}: {
-  value: UserRole;
-  onChange: (r: UserRole) => void;
-}) {
+function RoleSelect({ value, onChange }: { value: UserRole; onChange: (r: UserRole) => void }) {
   return (
     <select
       value={value}
@@ -132,42 +124,96 @@ function RoleSelect({
   );
 }
 
-// ── Invite user modal ─────────────────────────────────────────
-
-function InviteUserModal({
-  currentUserId,
-  onClose,
-  onInvited,
+function PasswordInput({
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+  placeholder = "8+ characters",
+  autoComplete = "new-password",
 }: {
-  currentUserId: string;
-  onClose: () => void;
-  onInvited: (invite: PendingInvite) => void;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggle: () => void;
+  placeholder?: string;
+  autoComplete?: string;
 }) {
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>("member");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          tabIndex={-1}
+          className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
+// ── Add user modal ────────────────────────────────────────────
+
+function AddUserModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (profile: UserProfile) => void;
+}) {
+  const [firstName, setFirstName]   = useState("");
+  const [lastName, setLastName]     = useState("");
+  const [email, setEmail]           = useState("");
+  const [role, setRole]             = useState<UserRole>("member");
+  const [status, setStatus]         = useState<"active" | "disabled">("active");
+  const [password, setPassword]     = useState("");
+  const [confirm, setConfirm]       = useState("");
+  const [showPw, setShowPw]         = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+
+  const validate = (): string | null => {
+    if (!firstName.trim()) return "First name is required.";
+    if (!email.trim()) return "Email is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
+    if (password.length < 8) return "Password must be at least 8 characters.";
+    if (password !== confirm) return "Passwords do not match.";
+    return null;
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const validationError = validate();
+    if (validationError) { setError(validationError); return; }
     setError(null);
-    if (!fullName.trim() || !email.trim()) {
-      setError("Name and email are required.");
-      return;
-    }
     setLoading(true);
     try {
-      const invite = await dbCreateInvite({
-        email: email.trim(),
-        fullName: fullName.trim(),
-        role,
-        invitedBy: currentUserId,
-      });
-      onInvited(invite);
+      const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+      const profile = await dbCreateUser({ email: email.trim(), password, fullName, role, status });
+      onCreated(profile);
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create invite.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to create user.";
+      setError(
+        msg.toLowerCase().includes("already") ||
+        msg.toLowerCase().includes("duplicate") ||
+        msg.toLowerCase().includes("registered")
+          ? "A user with this email address already exists."
+          : msg
+      );
     } finally {
       setLoading(false);
     }
@@ -178,12 +224,9 @@ function InviteUserModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
-          <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <Mail className="w-4 h-4 text-blue-500" />
-            Add user
-          </h3>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
+          <h3 className="text-base font-semibold text-slate-900">Add user</h3>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -192,20 +235,76 @@ function InviteUserModal({
           </button>
         </div>
 
-        <form onSubmit={submit} className="px-6 py-5 space-y-4">
-          <Field label="Full name">
-            <TextInput value={fullName} onChange={setFullName} placeholder="Alex Johnson" required />
-          </Field>
+        <form onSubmit={submit} className="px-6 py-5 space-y-4 overflow-y-auto">
+          {/* Name row */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First name">
+              <TextInput
+                value={firstName}
+                onChange={setFirstName}
+                placeholder="Alex"
+                autoComplete="given-name"
+                required
+              />
+            </Field>
+            <Field label="Last name">
+              <TextInput
+                value={lastName}
+                onChange={setLastName}
+                placeholder="Johnson"
+                autoComplete="family-name"
+              />
+            </Field>
+          </div>
+
           <Field label="Email">
-            <TextInput value={email} onChange={setEmail} type="email" placeholder="alex@example.com" required />
-          </Field>
-          <Field label="Role">
-            <RoleSelect value={role} onChange={setRole} />
+            <TextInput
+              value={email}
+              onChange={setEmail}
+              type="email"
+              placeholder="alex@example.com"
+              autoComplete="email"
+              required
+            />
           </Field>
 
-          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-            An invite record will be created. The user signs up with this email to claim their account and role.
-          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Role">
+              <RoleSelect value={role} onChange={setRole} />
+            </Field>
+            <Field label="Status">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as "active" | "disabled")}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 bg-white transition"
+              >
+                <option value="active">Active</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </Field>
+          </div>
+
+          {/* Password section */}
+          <div className="border-t border-slate-100 pt-4 space-y-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              Set password
+            </p>
+            <PasswordInput
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              show={showPw}
+              onToggle={() => setShowPw((v) => !v)}
+            />
+            <PasswordInput
+              label="Confirm password"
+              value={confirm}
+              onChange={setConfirm}
+              show={showPw}
+              onToggle={() => setShowPw((v) => !v)}
+              placeholder="Repeat password"
+            />
+          </div>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -227,7 +326,7 @@ function InviteUserModal({
               className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Add user
+              Create user
             </button>
           </div>
         </form>
@@ -249,33 +348,48 @@ function EditUserModal({
   onClose: () => void;
   onSaved: (updated: UserProfile) => void;
 }) {
-  const [fullName, setFullName] = useState(user.fullName);
-  const [role, setRole] = useState<UserRole>(user.role);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fullName, setFullName]         = useState(user.fullName);
+  const [role, setRole]                 = useState<UserRole>(user.role);
+  const [newPassword, setNewPassword]   = useState("");
+  const [confirmPw, setConfirmPw]       = useState("");
+  const [showPw, setShowPw]             = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
 
   const isSelf = user.id === currentUserId;
-  // Prevent the last admin from removing their own admin role
   const [adminCount, setAdminCount] = useState<number | null>(null);
-
   useEffect(() => {
     dbAdminCount().then(setAdminCount).catch(() => setAdminCount(null));
   }, []);
 
   const wouldLockOut = isSelf && user.role === "admin" && role !== "admin" && adminCount === 1;
+  const passwordProvided = newPassword.length > 0 || confirmPw.length > 0;
+
+  const validate = (): string | null => {
+    if (!fullName.trim()) return "Name is required.";
+    if (wouldLockOut) return "You are the only admin. Assign another admin before changing your own role.";
+    if (passwordProvided) {
+      if (newPassword.length < 8) return "New password must be at least 8 characters.";
+      if (newPassword !== confirmPw) return "Passwords do not match.";
+    }
+    return null;
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const validationError = validate();
+    if (validationError) { setError(validationError); return; }
     setError(null);
-    if (!fullName.trim()) { setError("Name is required."); return; }
-    if (wouldLockOut) { setError("You are the only admin. Assign another admin first."); return; }
     setLoading(true);
     try {
       await dbUpdateProfile(user.id, { fullName: fullName.trim(), role });
+      if (passwordProvided) {
+        await dbAdminUpdatePassword(user.id, newPassword);
+      }
       onSaved({ ...user, fullName: fullName.trim(), role, updatedAt: new Date().toISOString() });
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Update failed.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed.");
     } finally {
       setLoading(false);
     }
@@ -286,8 +400,8 @@ function EditUserModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
           <h3 className="text-base font-semibold text-slate-900">Edit user</h3>
           <button
             onClick={onClose}
@@ -297,8 +411,8 @@ function EditUserModal({
           </button>
         </div>
 
-        <form onSubmit={submit} className="px-6 py-5 space-y-4">
-          {/* Read-only info */}
+        <form onSubmit={submit} className="px-6 py-5 space-y-4 overflow-y-auto">
+          {/* Read-only identity */}
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
             <Avatar
               owner={{
@@ -315,7 +429,13 @@ function EditUserModal({
           </div>
 
           <Field label="Full name">
-            <TextInput value={fullName} onChange={setFullName} placeholder="Full name" required />
+            <TextInput
+              value={fullName}
+              onChange={setFullName}
+              placeholder="Full name"
+              autoComplete="name"
+              required
+            />
           </Field>
 
           <Field label="Role">
@@ -326,6 +446,34 @@ function EditUserModal({
               </p>
             )}
           </Field>
+
+          {/* Password change — optional */}
+          <div className="border-t border-slate-100 pt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Change Password
+              </p>
+            </div>
+            <p className="text-xs text-slate-400 -mt-2">
+              Leave blank to keep the current password.
+            </p>
+            <PasswordInput
+              label="New password"
+              value={newPassword}
+              onChange={setNewPassword}
+              show={showPw}
+              onToggle={() => setShowPw((v) => !v)}
+            />
+            <PasswordInput
+              label="Confirm new password"
+              value={confirmPw}
+              onChange={setConfirmPw}
+              show={showPw}
+              onToggle={() => setShowPw((v) => !v)}
+              placeholder="Repeat new password"
+            />
+          </div>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -346,8 +494,11 @@ function EditUserModal({
               disabled={loading || wouldLockOut}
               className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <Check className="w-3.5 h-3.5" />
+              {loading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
               Save
             </button>
           </div>
@@ -357,11 +508,7 @@ function EditUserModal({
   );
 }
 
-
-// ── Hook: close on outside click, aware of floating portal ───
-// useClickOutside fires on mousedown which unmounts the portal before
-// the click event reaches the menu button — callbacks never fire.
-// This hook checks BOTH the reference and the floating element.
+// ── Hook: close on outside click, aware of floating portal ────
 
 function useFloatingClickOutside(
   refEl: React.RefObject<HTMLElement | null>,
@@ -382,8 +529,6 @@ function useFloatingClickOutside(
 
   useEffect(() => {
     if (!enabled) return;
-    // Use mousedown so the menu closes when clicking elsewhere,
-    // but we intentionally skip it when the target is inside the portal.
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [enabled, handler]);
@@ -418,21 +563,17 @@ function ProfileActionsMenu({
 
   const refEl   = useRef<HTMLElement | null>(null);
   const floatEl = useRef<HTMLElement | null>(null);
-
   useFloatingClickOutside(refEl, floatEl, () => setOpen(false), open);
 
-  const isSelf = user.id === currentUserId;
+  const isSelf      = user.id === currentUserId;
   const isLastAdmin = user.role === "admin" && adminCount <= 1;
-  const canDisable = !isSelf && !isLastAdmin;
-  const canDelete  = !isSelf && !isLastAdmin;
+  const canDisable  = !isSelf && !isLastAdmin;
+  const canDelete   = !isSelf && !isLastAdmin;
 
   return (
     <div className="relative inline-block">
       <button
-        ref={(el) => {
-          refs.setReference(el);
-          refEl.current = el;
-        }}
+        ref={(el) => { refs.setReference(el); refEl.current = el; }}
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
       >
@@ -441,10 +582,7 @@ function ProfileActionsMenu({
 
       {open && ReactDOM.createPortal(
         <div
-          ref={(el) => {
-            refs.setFloating(el);
-            floatEl.current = el;
-          }}
+          ref={(el) => { refs.setFloating(el); floatEl.current = el; }}
           style={floatingStyles}
           className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
         >
@@ -486,90 +624,29 @@ function ProfileActionsMenu({
   );
 }
 
-function InviteActionsMenu({
-  onCancel,
-}: {
-  onCancel: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  const { refs, floatingStyles } = useFloating({
-    open,
-    strategy: "fixed",
-    placement: "bottom-end",
-    middleware: [offset(4), flip(), shift({ padding: 8 })],
-    whileElementsMounted: autoUpdate,
-  });
-
-  const refEl   = useRef<HTMLElement | null>(null);
-  const floatEl = useRef<HTMLElement | null>(null);
-
-  useFloatingClickOutside(refEl, floatEl, () => setOpen(false), open);
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={(el) => {
-          refs.setReference(el);
-          refEl.current = el;
-        }}
-        onClick={() => setOpen((v) => !v)}
-        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-      >
-        <MoreHorizontal className="w-4 h-4" />
-      </button>
-      {open && ReactDOM.createPortal(
-        <div
-          ref={(el) => {
-            refs.setFloating(el);
-            floatEl.current = el;
-          }}
-          style={floatingStyles}
-          className="z-[9999] bg-white rounded-xl shadow-lg border border-slate-200 min-w-[160px] py-1"
-        >
-          <button
-            onClick={() => { setOpen(false); onCancel(); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-          >
-            <X className="w-3.5 h-3.5" /> Cancel invite
-          </button>
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────
 
 export function UsersPage() {
   const { profile: currentProfile } = useAuthStore();
   const admin = isAdmin(currentProfile);
 
-  const [profiles, setProfiles]       = useState<UserProfile[]>([]);
-  const [invites, setInvites]         = useState<PendingInvite[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-  const [search, setSearch]           = useState("");
-  const [adminCount, setAdminCount]   = useState(0);
+  const [profiles, setProfiles]     = useState<UserProfile[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [search, setSearch]         = useState("");
+  const [adminCount, setAdminCount] = useState(0);
 
-  const [showCreate, setShowCreate]     = useState(false);
-  const [editUser, setEditUser]         = useState<UserProfile | null>(null);
-  const [deleteUser, setDeleteUser]     = useState<UserProfile | null>(null);
-  const [cancelInvite, setCancelInvite] = useState<PendingInvite | null>(null);
-  const [toggleUser, setToggleUser]     = useState<UserProfile | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editUser, setEditUser]     = useState<UserProfile | null>(null);
+  const [deleteUser, setDeleteUser] = useState<UserProfile | null>(null);
+  const [toggleUser, setToggleUser] = useState<UserProfile | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [p, i, ac] = await Promise.all([
-        loadProfiles(),
-        loadPendingInvites(),
-        dbAdminCount(),
-      ]);
+      const [p, ac] = await Promise.all([loadProfiles(), dbAdminCount()]);
       setProfiles(p);
-      setInvites(i);
       setAdminCount(ac);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load users.");
@@ -595,23 +672,20 @@ export function UsersPage() {
     );
   }
 
-  // ── Filtered rows ────────────────────────────────────────────
   const q = search.toLowerCase();
   const filteredProfiles = profiles.filter(
     (p) => !q || p.fullName.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)
   );
-  const filteredInvites = invites.filter(
-    (i) => !q || i.fullName.toLowerCase().includes(q) || i.email.toLowerCase().includes(q)
-  );
 
   // ── Handlers ─────────────────────────────────────────────────
-  const handleInviteCreated = (invite: PendingInvite) => {
-    setInvites((prev) => [...prev, invite]);
+  const handleUserCreated = (profile: UserProfile) => {
+    setProfiles((prev) => [...prev, profile]);
+    if (profile.role === "admin") setAdminCount((c) => c + 1);
   };
 
   const handleProfileSaved = (updated: UserProfile) => {
     setProfiles((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    if (updated.role === "admin") setAdminCount((c) => c + 1);
+    if (updated.role === "admin" && editUser?.role !== "admin") setAdminCount((c) => c + 1);
     if (editUser?.role === "admin" && updated.role !== "admin") setAdminCount((c) => Math.max(0, c - 1));
   };
 
@@ -637,17 +711,6 @@ export function UsersPage() {
     }
   };
 
-  const handleCancelInvite = async (invite: PendingInvite) => {
-    try {
-      await dbDeleteInvite(invite.id);
-      setInvites((prev) => prev.filter((i) => i.id !== invite.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Cancel failed.");
-    }
-  };
-
-  const totalCount = profiles.length + invites.length;
-
   // ── Render ───────────────────────────────────────────────────
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -656,7 +719,7 @@ export function UsersPage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Users</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            {totalCount} {totalCount === 1 ? "user" : "users"} total
+            {profiles.length} {profiles.length === 1 ? "user" : "users"} total
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -697,7 +760,7 @@ export function UsersPage() {
         )}
       </div>
 
-      {/* Error */}
+      {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -717,7 +780,7 @@ export function UsersPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
           </div>
-        ) : filteredProfiles.length === 0 && filteredInvites.length === 0 ? (
+        ) : filteredProfiles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-6">
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
               <Users className="w-5 h-5 text-slate-400" />
@@ -726,7 +789,7 @@ export function UsersPage() {
               {search ? "No users match your search." : "No users yet."}
             </p>
             {!search && (
-              <p className="text-xs text-slate-400">Invite someone to get started.</p>
+              <p className="text-xs text-slate-400">Add a user to get started.</p>
             )}
           </div>
         ) : (
@@ -752,7 +815,6 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {/* Active/disabled profiles */}
               {filteredProfiles.map((user) => (
                 <tr
                   key={user.id}
@@ -808,55 +870,16 @@ export function UsersPage() {
                   </td>
                 </tr>
               ))}
-
-              {/* Pending invites */}
-              {filteredInvites.map((invite) => (
-                <tr key={invite.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar
-                        owner={{
-                          name: invite.fullName || invite.email,
-                          initials: generateInitials(invite.fullName || invite.email),
-                          color: getAvatarColor(invite.email),
-                        }}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">
-                          {invite.fullName || invite.email}
-                        </p>
-                        <p className="text-xs text-slate-400 sm:hidden truncate">{invite.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <p className="text-sm text-slate-600 truncate">{invite.email}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <RoleBadge role={invite.role} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status="invited" />
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <p className="text-sm text-slate-400">{formatRelativeTime(invite.createdAt)}</p>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <InviteActionsMenu onCancel={() => setCancelInvite(invite)} />
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         )}
       </div>
 
       {/* Modals */}
-      {showCreate && currentProfile && (
-        <InviteUserModal
-          currentUserId={currentProfile.id}
+      {showCreate && (
+        <AddUserModal
           onClose={() => setShowCreate(false)}
-          onInvited={handleInviteCreated}
+          onCreated={handleUserCreated}
         />
       )}
 
@@ -891,16 +914,6 @@ export function UsersPage() {
           confirmLabel="Delete user"
           onConfirm={() => { handleDeleteProfile(deleteUser); setDeleteUser(null); }}
           onCancel={() => setDeleteUser(null)}
-        />
-      )}
-
-      {cancelInvite && (
-        <ConfirmDialog
-          title="Cancel invite"
-          message={`Cancel the invite for ${cancelInvite.email}? They will no longer be able to join with this invite.`}
-          confirmLabel="Cancel invite"
-          onConfirm={() => { handleCancelInvite(cancelInvite); setCancelInvite(null); }}
-          onCancel={() => setCancelInvite(null)}
         />
       )}
     </div>

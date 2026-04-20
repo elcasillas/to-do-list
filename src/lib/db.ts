@@ -322,6 +322,7 @@ export async function dbCreateUser(params: {
   password: string;
   fullName: string;
   role: UserRole;
+  status?: "active" | "disabled";
 }): Promise<UserProfile> {
   const { data, error } = await supabase.functions.invoke("admin-create-user", {
     body: params,
