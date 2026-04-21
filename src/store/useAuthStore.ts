@@ -10,6 +10,7 @@ function dbToProfile(row: Record<string, unknown>): UserProfile {
     fullName: (row.full_name as string) || "",
     email: row.email as string,
     avatarUrl: (row.avatar_url as string) || null,
+    color: (row.color as string) || "#3b82f6",
     role: row.role as UserRole,
     status: row.status as UserStatus,
     createdAt: row.created_at as string,

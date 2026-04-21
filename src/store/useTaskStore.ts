@@ -12,12 +12,14 @@ import {
   dbDeleteTask,
   dbBatchUpdateOrders,
   dbBatchUpdateGroupOrders,
+  dbBatchUpdateTaskOwnerColors,
   loadTaskUpdates as loadTaskUpdatesFromDb,
   loadUpdateCounts,
   dbInsertTaskUpdate,
   dbUpdateTaskUpdate,
   dbDeleteTaskUpdate,
 } from "../lib/db";
+import { useAuthStore } from "./useAuthStore";
 import type {
   Task,
   Group,
@@ -157,6 +159,8 @@ interface TaskStore {
   toggleGroup: (id: string) => void;
   reorderGroups: (activeId: string, overId: string) => Promise<void>;
   clearGroupReorderError: () => void;
+  /** Propagates a user's new color to all tasks they own (optimistic + DB sync). */
+  updateOwnerColor: (ownerName: string, color: string) => void;
 
   setFilter: (filter: Partial<FilterState>) => void;
   clearFilters: () => void;
@@ -432,6 +436,15 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
 
   clearGroupReorderError: () => set({ groupReorderError: null }),
 
+  updateOwnerColor: (ownerName, color) => {
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.owner?.name === ownerName ? { ...t, owner: { ...t.owner!, color } } : t
+      ),
+    }));
+    dbBatchUpdateTaskOwnerColors(ownerName, color).catch(console.error);
+  },
+
   // ── Filter / sort (local only) ───────────────────────────────
   setFilter: (filter) => {
     set({ filter: { ...get().filter, ...filter } });
@@ -492,14 +505,16 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   },
 
   addTaskUpdate: (taskId, content) => {
-    let authorName = "Ed Casillas";
-    try { authorName = localStorage.getItem("authorName") || authorName; } catch { /* ignore */ }
+    const { profile } = useAuthStore.getState();
+    const authorName = profile?.fullName || (() => {
+      try { return localStorage.getItem("authorName") || "Unknown"; } catch { return "Unknown"; }
+    })();
     const update: TaskUpdate = {
       id: uuidv4(),
       taskId,
       authorName,
       authorInitials: generateInitials(authorName),
-      authorColor: getAvatarColor(authorName),
+      authorColor: profile?.color ?? getAvatarColor(authorName),
       content,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

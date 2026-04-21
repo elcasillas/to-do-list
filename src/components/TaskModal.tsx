@@ -95,7 +95,7 @@ export function TaskModal({ task, defaultGroupId, onClose }: TaskModalProps) {
       ? {
           name:     selectedUser.fullName,
           initials: generateInitials(selectedUser.fullName),
-          color:    getAvatarColor(selectedUser.fullName),
+          color:    selectedUser.color || getAvatarColor(selectedUser.fullName),
           avatar:   selectedUser.avatarUrl ?? undefined,
         }
       : null;

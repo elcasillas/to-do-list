@@ -36,7 +36,8 @@ import {
   dbCreateUser,
   dbAdminUpdatePassword,
 } from "../lib/db";
-import { cn, formatRelativeTime, generateInitials, getAvatarColor } from "../lib/utils";
+import { useTaskStore } from "../store/useTaskStore";
+import { cn, formatRelativeTime, generateInitials, getAvatarColor, getContrastColor } from "../lib/utils";
 import type { UserProfile, UserRole } from "../types";
 
 // ── Role / status config ──────────────────────────────────────
@@ -165,6 +166,76 @@ function PasswordInput({
   );
 }
 
+// ── Color picker ─────────────────────────────────────────────
+
+const PRESET_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899",
+  "#14b8a6", "#64748b",
+];
+
+const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+
+function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [hex, setHex] = useState(value);
+  const isValid = HEX_RE.test(hex);
+
+  // Keep local hex in sync if parent value changes
+  useEffect(() => { setHex(value); }, [value]);
+
+  const commitHex = (raw: string) => {
+    const v = raw.startsWith("#") ? raw : `#${raw}`;
+    setHex(v);
+    if (HEX_RE.test(v)) onChange(v);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        {/* Native color picker */}
+        <input
+          type="color"
+          value={isValid ? hex : value}
+          onChange={(e) => { setHex(e.target.value); onChange(e.target.value); }}
+          className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white flex-shrink-0"
+        />
+        {/* Hex text input */}
+        <input
+          type="text"
+          value={hex}
+          onChange={(e) => commitHex(e.target.value)}
+          placeholder="#3b82f6"
+          maxLength={7}
+          spellCheck={false}
+          className={cn(
+            "w-28 px-3 py-2 text-sm font-mono border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition",
+            isValid ? "border-slate-200" : "border-red-400 focus:ring-red-500/30 focus:border-red-400"
+          )}
+        />
+        {!isValid && (
+          <span className="text-xs text-red-500">Invalid hex</span>
+        )}
+      </div>
+      {/* Preset swatches */}
+      <div className="flex flex-wrap gap-1.5">
+        {PRESET_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => { setHex(c); onChange(c); }}
+            className={cn(
+              "w-6 h-6 rounded-full transition-transform hover:scale-110 flex-shrink-0",
+              value === c && "ring-2 ring-offset-1 ring-blue-500"
+            )}
+            style={{ backgroundColor: c }}
+            title={c}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Add user modal ────────────────────────────────────────────
 
 function AddUserModal({
@@ -177,6 +248,7 @@ function AddUserModal({
   const [firstName, setFirstName]   = useState("");
   const [lastName, setLastName]     = useState("");
   const [email, setEmail]           = useState("");
+  const [color, setColor]           = useState("#3b82f6");
   const [role, setRole]             = useState<UserRole>("member");
   const [status, setStatus]         = useState<"active" | "disabled">("active");
   const [password, setPassword]     = useState("");
@@ -189,6 +261,7 @@ function AddUserModal({
     if (!firstName.trim()) return "First name is required.";
     if (!email.trim()) return "Email is required.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) return "Enter a valid hex color (e.g. #3b82f6).";
     if (password.length < 8) return "Password must be at least 8 characters.";
     if (password !== confirm) return "Passwords do not match.";
     return null;
@@ -202,7 +275,7 @@ function AddUserModal({
     setLoading(true);
     try {
       const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
-      const profile = await dbCreateUser({ email: email.trim(), password, fullName, role, status });
+      const profile = await dbCreateUser({ email: email.trim(), password, fullName, role, status, color });
       onCreated(profile);
       onClose();
     } catch (e) {
@@ -266,6 +339,21 @@ function AddUserModal({
               autoComplete="email"
               required
             />
+          </Field>
+
+          {/* Color + preview */}
+          <Field label="Color">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-semibold select-none"
+                style={{ backgroundColor: color, color: getContrastColor(color) }}
+              >
+                {firstName ? firstName[0].toUpperCase() : "?"}
+              </div>
+              <div className="flex-1">
+                <ColorPicker value={color} onChange={setColor} />
+              </div>
+            </div>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
@@ -349,6 +437,7 @@ function EditUserModal({
   onSaved: (updated: UserProfile) => void;
 }) {
   const [fullName, setFullName]         = useState(user.fullName);
+  const [color, setColor]               = useState(user.color || "#3b82f6");
   const [role, setRole]                 = useState<UserRole>(user.role);
   const [newPassword, setNewPassword]   = useState("");
   const [confirmPw, setConfirmPw]       = useState("");
@@ -367,6 +456,7 @@ function EditUserModal({
 
   const validate = (): string | null => {
     if (!fullName.trim()) return "Name is required.";
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) return "Enter a valid hex color (e.g. #3b82f6).";
     if (wouldLockOut) return "You are the only admin. Assign another admin before changing your own role.";
     if (passwordProvided) {
       if (newPassword.length < 8) return "New password must be at least 8 characters.";
@@ -382,11 +472,15 @@ function EditUserModal({
     setError(null);
     setLoading(true);
     try {
-      await dbUpdateProfile(user.id, { fullName: fullName.trim(), role });
+      await dbUpdateProfile(user.id, { fullName: fullName.trim(), role, color });
       if (passwordProvided) {
         await dbAdminUpdatePassword(user.id, newPassword);
       }
-      onSaved({ ...user, fullName: fullName.trim(), role, updatedAt: new Date().toISOString() });
+      // Propagate color change to all tasks this user owns
+      if (color !== user.color) {
+        useTaskStore.getState().updateOwnerColor(fullName.trim(), color);
+      }
+      onSaved({ ...user, fullName: fullName.trim(), role, color, updatedAt: new Date().toISOString() });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed.");
@@ -412,13 +506,13 @@ function EditUserModal({
         </div>
 
         <form onSubmit={submit} className="px-6 py-5 space-y-4 overflow-y-auto">
-          {/* Read-only identity */}
+          {/* Live identity preview */}
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
             <Avatar
               owner={{
-                name: user.fullName,
-                initials: generateInitials(user.fullName),
-                color: getAvatarColor(user.fullName),
+                name: fullName || user.fullName,
+                initials: generateInitials(fullName || user.fullName),
+                color,
               }}
               size="md"
             />
@@ -436,6 +530,10 @@ function EditUserModal({
               autoComplete="name"
               required
             />
+          </Field>
+
+          <Field label="Color">
+            <ColorPicker value={color} onChange={setColor} />
           </Field>
 
           <Field label="Role">
@@ -838,7 +936,7 @@ export function UsersPage() {
                         owner={{
                           name: user.fullName,
                           initials: generateInitials(user.fullName),
-                          color: getAvatarColor(user.fullName),
+                          color: user.color || getAvatarColor(user.fullName),
                           avatar: user.avatarUrl ?? undefined,
                         }}
                       />

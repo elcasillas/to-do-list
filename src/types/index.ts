@@ -74,6 +74,7 @@ export interface UserProfile {
   fullName: string;
   email: string;
   avatarUrl?: string | null;
+  color: string;
   role: UserRole;
   status: UserStatus;
   createdAt: string;

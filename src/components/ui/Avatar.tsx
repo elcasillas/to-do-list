@@ -1,4 +1,4 @@
-import { cn } from "../../lib/utils";
+import { cn, getContrastColor } from "../../lib/utils";
 import { User } from "lucide-react";
 import type { TaskOwner } from "../../types";
 
@@ -41,12 +41,12 @@ export function Avatar({ owner, size = "sm", className }: AvatarProps) {
   return (
     <div
       className={cn(
-        "rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 select-none",
+        "rounded-full flex items-center justify-center font-semibold flex-shrink-0 select-none",
         dim,
         textSize,
         className
       )}
-      style={{ backgroundColor: owner.color }}
+      style={{ backgroundColor: owner.color, color: getContrastColor(owner.color) }}
       title={owner.name}
     >
       {owner.initials}
