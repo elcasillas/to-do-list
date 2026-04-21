@@ -276,10 +276,18 @@ export const useTaskStore = create<TaskStore>()((set, get) => ({
   },
 
   deleteTask: (id) => {
-    set((state) => ({
-      tasks: state.tasks.filter((t) => t.id !== id),
-      selectedTaskId: state.selectedTaskId === id ? null : state.selectedTaskId,
-    }));
+    set((state) => {
+      const updates = { ...state.updates };
+      delete updates[id];
+      const updateCounts = { ...state.updateCounts };
+      delete updateCounts[id];
+      return {
+        tasks: state.tasks.filter((t) => t.id !== id),
+        selectedTaskId: state.selectedTaskId === id ? null : state.selectedTaskId,
+        updates,
+        updateCounts,
+      };
+    });
     dbDeleteTask(id).catch(console.error);
   },
 

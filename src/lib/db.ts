@@ -162,6 +162,8 @@ export async function dbUpdateTask(
 }
 
 export async function dbDeleteTask(id: string): Promise<void> {
+  // Remove child updates first so no orphaned rows remain
+  await supabase.from("task_updates").delete().eq("task_id", id);
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) throw error;
 }
