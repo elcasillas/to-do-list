@@ -272,7 +272,7 @@ function AuthenticatedApp() {
                     )}
                   >
                     <Users className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Users</span>
+                    <span className="hidden sm:inline">Users!</span>
                   </button>
                 )}
               </nav>
