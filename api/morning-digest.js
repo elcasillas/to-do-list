@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       supabaseFetch("/task_updates?select=task_id,content,author_name,created_at&order=created_at.desc&limit=200"),
       supabaseFetch("/groups?select=id,name&order=sort_order"),
     ]);
-    res.json({ tasks, updates, groups });
+    res.json({ tasks, task_updates: updates, groups });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
