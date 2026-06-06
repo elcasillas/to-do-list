@@ -15,6 +15,14 @@ async function supabaseFetch(path) {
 }
 
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   try {
     const [tasks, updates, groups] = await Promise.all([
       supabaseFetch("/tasks?select=id,title,status,priority,due_date,notes,completed,owner_name,group_id&completed=eq.false&order=due_date"),
