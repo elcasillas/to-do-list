@@ -29,8 +29,11 @@ export default async function handler(req, res) {
       supabaseFetch("/task_updates?select=task_id,content,author_name,created_at&order=created_at.desc&limit=200"),
       supabaseFetch("/groups?select=id,name&order=sort_order"),
     ]);
-    res.json({ tasks, task_updates: updates, groups });
+    const payload = JSON.stringify({ tasks, task_updates: updates, groups });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html><html><body><pre id="data">${payload}</pre></body></html>`);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(500).send(`<!DOCTYPE html><html><body><pre id="data">${JSON.stringify({ error: err.message })}</pre></body></html>`);
   }
 }
