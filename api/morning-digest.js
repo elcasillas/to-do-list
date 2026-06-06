@@ -1,11 +1,11 @@
 const SUPABASE_URL = "https://qnclwqjjurfpkwofqbhf.supabase.co/rest/v1";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function supabaseFetch(path) {
   const res = await fetch(`${SUPABASE_URL}${path}`, {
     headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     },
   });
   if (!res.ok) {
