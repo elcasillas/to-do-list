@@ -1,0 +1,28 @@
+const SUPABASE_URL = "https://qnclwqjjurfpkwofqbhf.supabase.co/rest/v1";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+async function supabaseFetch(path) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Supabase fetch failed: ${res.status} — ${path}`);
+  }
+  return res.json();
+}
+
+export default async function handler(req, res) {
+  try {
+    const [tasks, updates, groups] = await Promise.all([
+      supabaseFetch("/tasks?select=id,title,status,priority,due_date,notes,completed,owner_name,group_id&completed=eq.false&order=due_date"),
+      supabaseFetch("/task_updates?select=task_id,content,author_name,created_at&order=created_at.desc&limit=200"),
+      supabaseFetch("/groups?select=id,name&order=sort_order"),
+    ]);
+    res.json({ tasks, updates, groups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
